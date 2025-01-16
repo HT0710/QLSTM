@@ -1,0 +1,29 @@
+# Configuration for callback.py
+
+
+# Log during the training process
+verbose: True
+
+# Show model summary
+model_summary: true
+
+# Enable progress bar
+progress_bar: true
+
+# Log learning rate
+lr_monitor: true
+
+# Model checkpoint during training
+checkpoint:
+  monitor: val/loss
+  save_weights_only: true
+  save_top_k: 1
+  save_last: true
+enable_checkpoint: true
+
+# Config early stopping
+early_stopping:
+  monitor: val/loss
+  min_delta: 0.0001
+  patience: 10
+enable_early_stopping: false

@@ -1,0 +1,33 @@
+# Configuration for train.py
+
+
+# Set global seed
+set_seed: 42
+
+# Set number of workers (int | float)
+num_workers: 0.6
+
+# Config dataset
+data:
+  data_path: qlstm/data/place_1_new.xlsx
+  data_limit: null
+  split_size: [0.75, 0.15, 0.1]
+
+# Config model
+model:
+  pretrained: false
+  freeze: false
+
+# Config scheduler
+scheduler:
+  warmup_epochs: 3
+  start_factor: 0.01
+
+# Config trainer
+trainer:
+  batch_size: 32
+  learning_rate: 1e-3
+  num_epoch: 25
+  checkpoint: null
+  precision: 16-mixed
+  gradient_clipping: 0.5

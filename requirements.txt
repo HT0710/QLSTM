@@ -1,0 +1,13 @@
+# madatories
+numpy
+torch
+lightning
+
+# others
+rich
+hydra-core
+rootutils
+psutil
+
+# dev
+tensorboard
