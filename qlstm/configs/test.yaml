@@ -5,4 +5,4 @@
 data_path: qlstm/data/place_1_new.xlsx
 
 # Model checkpoint
-checkpoint: lightning_logs/version_0/checkpoints/last.ckpt
+checkpoint: lightning_logs/version_4/checkpoints/last.ckpt

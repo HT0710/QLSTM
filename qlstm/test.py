@@ -25,7 +25,7 @@ def main(cfg: DictConfig) -> None:
     dataset.prepare_data()
 
     # Define model
-    model = LSTM(input_size=1, hidden_size=64)
+    model = LSTM(input_size=7, hidden_size=64, num_layers=1)
 
     # Define lightning model
     lit_model = LitModel(model=model, checkpoint=cfg["checkpoint"]).eval()
@@ -33,13 +33,15 @@ def main(cfg: DictConfig) -> None:
     # Inference loop
     with torch.inference_mode():
         while True:
-            X = torch.tensor([float(v) for v in Prompt.ask("Input").split(",")])
+            X = torch.tensor(
+                [float(v.replace(",", "")) for v in Prompt.ask("Input").split()]
+            )
 
-            X = dataset.encoder.transform(X.reshape(-1, 1))
+            X = dataset.encoder["input"].transform(X.reshape(1, -1))
 
             out = lit_model(torch.tensor(X, dtype=torch.float32))
 
-            out = dataset.encoder.inverse_transform(out)
+            out = dataset.encoder["output"].inverse_transform(out)
 
             print(f"Output: {out.reshape(-1)}\n")
 

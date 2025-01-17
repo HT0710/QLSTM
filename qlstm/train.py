@@ -42,7 +42,7 @@ def main(cfg: DictConfig) -> None:
     )
 
     # Define model
-    model = LSTM(input_size=1, hidden_size=64)
+    model = LSTM(input_size=7, hidden_size=64, num_layers=1)
 
     # Setup loss
     loss = nn.SmoothL1Loss()

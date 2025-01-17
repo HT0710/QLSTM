@@ -14,9 +14,9 @@ class LSTMCell(nn.Module):
         self.b_ih = nn.Parameter(torch.Tensor(4 * hidden_size))
         self.b_hh = nn.Parameter(torch.Tensor(4 * hidden_size))
 
-        self.init_weights()
+        self._init_weights()
 
-    def init_weights(self):
+    def _init_weights(self):
         # Initialize weights
         nn.init.xavier_uniform_(self.W_ih)
         nn.init.xavier_uniform_(self.W_hh)

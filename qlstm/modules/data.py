@@ -117,14 +117,25 @@ class CustomDataModule(LightningDataModule):
         self.dataframe = data.dropna().drop_duplicates()
 
         # Process data
-        data = self.dataframe["Measured Power"]
+        data = self.dataframe[
+            [
+                "Measured Power",
+                "NWP Radiation",
+                "NWP Rainfall",
+                "NWP Temperature",
+                "NWP Pressure",
+                "NWP Windspeed",
+                "Measured Radiation",
+            ]
+        ]
 
-        self.encoder = MinMaxScaler()
+        self.encoder = {"input": MinMaxScaler(), "output": MinMaxScaler()}
 
-        data = self.encoder.fit_transform(data.values.reshape(-1, 1))
+        inputs = data[:-1:].values
+        inputs = self.encoder["input"].fit_transform(inputs)
 
-        inputs = data[:-1:]
-        labels = data[1::]
+        labels = data[["Measured Power"]][1::].values
+        labels = self.encoder["output"].fit_transform(labels)
 
         # Modulize data
         data = DataModule(inputs, labels)

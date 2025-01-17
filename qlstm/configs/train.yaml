@@ -27,7 +27,7 @@ scheduler:
 trainer:
   batch_size: 32
   learning_rate: 1e-3
-  num_epoch: 25
+  num_epoch: 100
   checkpoint: null
   precision: 16-mixed
   gradient_clipping: 0.5
