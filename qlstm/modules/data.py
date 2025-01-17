@@ -119,9 +119,9 @@ class CustomDataModule(LightningDataModule):
         # Process data
         data = self.dataframe["Measured Power"]
 
-        encoder = MinMaxScaler()
+        self.encoder = MinMaxScaler()
 
-        data = encoder.fit_transform(data.values.reshape(-1, 1))
+        data = self.encoder.fit_transform(data.values.reshape(-1, 1))
 
         inputs = data[:-1:]
         labels = data[1::]
@@ -131,9 +131,7 @@ class CustomDataModule(LightningDataModule):
 
         # Limit data
         if self.data_limit:
-            print(0)
             data = self._limit_data(data)
-            print(1)
 
         # Finalize
         self.dataset = data

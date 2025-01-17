@@ -28,7 +28,6 @@ class LitModel(LightningModule):
         optimizer: List[optim.Optimizer] = None,
         scheduler: List[lr_scheduler.LRScheduler] = None,
         checkpoint: str = None,
-        num_classes: int = None,
         device: str = "auto",
     ):
         """
@@ -46,8 +45,6 @@ class LitModel(LightningModule):
             The learning rate scheduler, by default None
         checkpoint : str, optional
             Path to a checkpoint file for model loading, by default None
-        num_classes : int, optional
-            The number of output layers, required only when the model does not provide one, by default None
         device : str, optional
             The device to load the model on, by default "auto"
         """
@@ -57,7 +54,6 @@ class LitModel(LightningModule):
         self.criterion = criterion
         self.optimizer = optimizer
         self.scheduler = scheduler
-        self._num_classes = num_classes
         if checkpoint:
             self.load(checkpoint, device=device)
 
@@ -217,10 +213,10 @@ class LitModel(LightningModule):
             raise FileNotFoundError(f"Checkpoint file not found: {path}")
         if verbose:
             print("[bold]Load checkpoint:[/] ...", end="\r")
-        self.load_state_dict(
-            torch.load(path, map_location=device_handler(device))["state_dict"],
-            strict=strict,
+        weight = torch.load(
+            path, map_location=device_handler(device), weights_only=False
         )
+        self.load_state_dict(weight["state_dict"], strict=strict)
         if verbose:
             print("[bold]Load checkpoint:[/] Done")
 
