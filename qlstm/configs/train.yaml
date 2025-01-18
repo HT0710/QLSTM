@@ -5,13 +5,14 @@
 set_seed: 42
 
 # Set number of workers (int | float)
-num_workers: 0.6
+num_workers: 0.8
 
 # Config dataset
 data:
   data_path: qlstm/data/place_1_new.xlsx
+  time_steps: 12
   data_limit: null
-  split_size: [0.75, 0.15, 0.1]
+  split_size: [0.7, 0.2, 0.1]
 
 # Config model
 model:
@@ -20,14 +21,14 @@ model:
 
 # Config scheduler
 scheduler:
-  warmup_epochs: 3
+  warmup_epochs: 5
   start_factor: 0.01
 
 # Config trainer
 trainer:
   batch_size: 32
   learning_rate: 1e-3
-  num_epoch: 100
+  num_epoch: 50
   checkpoint: null
-  precision: 16-mixed
-  gradient_clipping: 0.5
+  precision: 32-true
+  gradient_clipping: null

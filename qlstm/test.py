@@ -5,7 +5,6 @@ import rootutils
 import torch
 from omegaconf import DictConfig
 from rich import print, traceback
-from rich.prompt import Prompt
 
 rootutils.autosetup()
 traceback.install()
@@ -21,29 +20,36 @@ def main(cfg: DictConfig) -> None:
     shutil.rmtree("outputs")
 
     # Define dataset
-    dataset = CustomDataModule(data_path=cfg["data_path"])
+    dataset = CustomDataModule(data_path=cfg["data_path"], time_steps=cfg["time_steps"])
     dataset.prepare_data()
 
     # Define model
-    model = LSTM(input_size=7, hidden_size=64, num_layers=1)
+    model = LSTM(input_size=7, hidden_size=128, num_layers=4)
 
     # Define lightning model
     lit_model = LitModel(model=model, checkpoint=cfg["checkpoint"]).eval()
 
+    torch.set_printoptions(4, sci_mode=False)
     # Inference loop
     with torch.inference_mode():
         while True:
-            X = torch.tensor(
-                [float(v.replace(",", "")) for v in Prompt.ask("Input").split()]
-            )
+            index = input("Index: ")
 
-            X = dataset.encoder["input"].transform(X.reshape(1, -1))
+            try:
+                index = int(index)
+            except Exception:
+                exit()
 
-            out = lit_model(torch.tensor(X, dtype=torch.float32))
+            X, y = dataset.dataset[index]
+            print(X)
 
-            out = dataset.encoder["output"].inverse_transform(out)
+            out = lit_model(X.unsqueeze(0))
 
-            print(f"Output: {out.reshape(-1)}\n")
+            y = dataset.encoder["Measured Power"].inverse_transform(y.reshape(-1, 1))
+            out = dataset.encoder["Measured Power"].inverse_transform(out)
+
+            print(f"Label: {y.item()}")
+            print(f"Output: {out.item()}\n")
 
 
 if __name__ == "__main__":

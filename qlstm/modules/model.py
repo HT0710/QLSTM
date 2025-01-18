@@ -118,7 +118,7 @@ class LitModel(LightningModule):
         torch.Tensor
             The output of the model.
         """
-        out, _ = self.model(X.view(len(X), 1, -1))
+        out, _ = self.model(X)
         out = self.fc(out[:, -1, :])
         return out
 

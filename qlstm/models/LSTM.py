@@ -4,11 +4,10 @@ import torch.nn as nn
 
 class LSTMCell(nn.Module):
     def __init__(self, input_size, hidden_size):
-        super(LSTMCell, self).__init__()
+        super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
 
-        # Weight matrices for input gate, forget gate, cell gate, and output gate
         self.W_ih = nn.Parameter(torch.Tensor(4 * hidden_size, input_size))
         self.W_hh = nn.Parameter(torch.Tensor(4 * hidden_size, hidden_size))
         self.b_ih = nn.Parameter(torch.Tensor(4 * hidden_size))
@@ -17,7 +16,6 @@ class LSTMCell(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        # Initialize weights
         nn.init.xavier_uniform_(self.W_ih)
         nn.init.xavier_uniform_(self.W_hh)
         nn.init.zeros_(self.b_ih)
@@ -26,7 +24,6 @@ class LSTMCell(nn.Module):
     def forward(self, x: torch.Tensor, hidden):
         h_prev, c_prev = hidden
 
-        # Linear transformations
         gates = (
             torch.matmul(x, self.W_ih.t())
             + torch.matmul(h_prev, self.W_hh.t())
@@ -34,16 +31,13 @@ class LSTMCell(nn.Module):
             + self.b_hh
         )
 
-        # Split gates
         input_gate, forget_gate, cell_gate, output_gate = gates.chunk(4, dim=1)
 
-        # Apply activation functions
         input_gate = torch.sigmoid(input_gate)
         forget_gate = torch.sigmoid(forget_gate)
         cell_gate = torch.tanh(cell_gate)
         output_gate = torch.sigmoid(output_gate)
 
-        # Update cell state and hidden state
         c_next = forget_gate * c_prev + input_gate * cell_gate
         h_next = output_gate * torch.tanh(c_next)
 
@@ -52,7 +46,7 @@ class LSTMCell(nn.Module):
 
 class LSTM(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers=1):
-        super(LSTM, self).__init__()
+        super().__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.cells = nn.ModuleList(
@@ -67,11 +61,11 @@ class LSTM(nn.Module):
 
         if hidden is None:
             h = [
-                torch.zeros(batch_size, self.hidden_size).to(x.device)
+                torch.zeros(batch_size, self.hidden_size, device=x.device)
                 for _ in range(self.num_layers)
             ]
             c = [
-                torch.zeros(batch_size, self.hidden_size).to(x.device)
+                torch.zeros(batch_size, self.hidden_size, device=x.device)
                 for _ in range(self.num_layers)
             ]
         else:
