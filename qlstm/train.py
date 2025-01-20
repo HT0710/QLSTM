@@ -14,7 +14,7 @@ from rich import traceback
 rootutils.autosetup()
 traceback.install()
 
-from models.LSTM import LSTM
+from models.QLSTM import QLSTM
 from modules.callback import custom_callbacks
 from modules.data import CustomDataModule
 from modules.model import LitModel
@@ -42,7 +42,7 @@ def main(cfg: DictConfig) -> None:
     )
 
     # Define model
-    model = LSTM(input_size=7, hidden_size=128, num_layers=4)
+    model = QLSTM(input_size=7, hidden_size=128, n_qubits=4, n_qlayers=4)
 
     # Setup loss
     loss = nn.SmoothL1Loss()
