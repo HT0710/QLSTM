@@ -147,6 +147,11 @@ class CustomDataModule(LightningDataModule):
                 .astype("object")
             )
 
+        # Shift data
+        data.loc[:, "Measured Power"] = data["Measured Power"].shift(1)
+        data.loc[:, "Measured Radiation"] = data["Measured Radiation"].shift(1)
+        data = data.dropna()
+
         # Create inputs and labels
         inputs = data.values
         labels = data[["Measured Power"]].values

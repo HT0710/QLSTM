@@ -41,7 +41,6 @@ def main(cfg: DictConfig) -> None:
                 exit()
 
             X, y = dataset.dataset[index]
-            print(X)
 
             out = lit_model(X.unsqueeze(0))
 
