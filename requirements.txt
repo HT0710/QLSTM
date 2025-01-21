@@ -1,5 +1,7 @@
 # madatories
 numpy
+pandas
+scikit-learn
 torch
 lightning
 
@@ -8,6 +10,7 @@ rich
 hydra-core
 rootutils
 psutil
+openpyxl
 
 # dev
 tensorboard
