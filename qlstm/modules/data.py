@@ -17,18 +17,18 @@ from modules.utils import workers_handler
 class CustomDataset(Dataset):
     """Pytorch Data Module"""
 
-    def __init__(self, inputs, labels):
-        self.inputs = torch.tensor(inputs, dtype=torch.float32)
-        self.labels = torch.tensor(labels, dtype=torch.float32)
+    def __init__(self, X, y):
+        self.X = torch.tensor(X, dtype=torch.float32)
+        self.y = torch.tensor(y, dtype=torch.float32)
 
-        if len(self.inputs) != len(self.labels):
+        if self.X.shape[0] != self.y.shape[0]:
             raise IndexError("The length of the inputs and labels do not match.")
 
     def __len__(self):
-        return len(self.inputs)
+        return self.X.shape[0]
 
     def __getitem__(self, idx):
-        return self.inputs[idx], self.labels[idx]
+        return self.X[idx], self.y[idx]
 
 
 class CustomDataModule(LightningDataModule):
@@ -40,7 +40,7 @@ class CustomDataModule(LightningDataModule):
         data_limit: Optional[float] = None,
         split_size: Sequence[float] = (0.75, 0.15, 0.1),
         num_workers: int = 0,
-        pin_memory: bool = True,
+        pin_memory: bool = torch.cuda.is_available(),
     ) -> None:
         """
         Custom Data Module for PyTorch Lightning

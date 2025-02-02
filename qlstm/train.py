@@ -14,7 +14,7 @@ from rich import traceback
 rootutils.autosetup()
 traceback.install()
 
-from models.QLSTM import QLSTM
+from models.QLSTM2 import QLSTM
 from modules.callback import custom_callbacks
 from modules.data import CustomDataModule
 from modules.model import LitModel
@@ -34,33 +34,28 @@ def main(cfg: DictConfig) -> None:
         seed_everything(seed=cfg["set_seed"], workers=True)
 
     # Define dataset
-    dataset = CustomDataModule(
-        **cfg["data"],
-        batch_size=cfg["trainer"]["batch_size"],
-        num_workers=cfg["num_workers"] if torch.cuda.is_available() else 0,
-        pin_memory=torch.cuda.is_available(),
-    )
+    dataset = CustomDataModule(**cfg["data"])
 
     # Define model
-    model = QLSTM(input_size=7, hidden_size=128, n_qubits=4, n_qlayers=4)
+    model = QLSTM(
+        input_size=7,
+        hidden_size=128,
+        # seq_length=cfg["data"]["time_steps"],
+        n_qubits=4,
+    )
 
     # Setup loss
     loss = nn.SmoothL1Loss()
 
     # Setup optimizer
-    optimizer = optim.AdamW(
-        params=model.parameters(),
-        lr=cfg["trainer"]["learning_rate"],
-        weight_decay=cfg["trainer"]["learning_rate"],
-    )
+    optimizer = optim.AdamW(params=model.parameters(), **cfg["optimizer"])
 
     # Setup scheduler
     scheduler = scheduler_with_warmup(
         scheduler=ls.CosineAnnealingLR(
-            optimizer=optimizer, T_max=cfg["trainer"]["num_epoch"]
+            optimizer=optimizer, T_max=cfg["trainer"]["max_epochs"]
         ),
-        warmup_epochs=cfg["scheduler"]["warmup_epochs"],
-        start_factor=cfg["scheduler"]["start_factor"],
+        **cfg["scheduler"],
     )
 
     # Lightning model
@@ -69,8 +64,7 @@ def main(cfg: DictConfig) -> None:
         criterion=loss,
         optimizer=[optimizer],
         scheduler=[scheduler],
-        checkpoint=cfg["trainer"]["checkpoint"],
-        device="auto",
+        **cfg["model"],
     )
 
     # Save config
@@ -82,11 +76,9 @@ def main(cfg: DictConfig) -> None:
 
     # Lightning trainer
     trainer = Trainer(
-        max_epochs=cfg["trainer"]["num_epoch"],
-        precision=cfg["trainer"]["precision"],
         logger=TensorBoardLogger(save_dir="."),
         callbacks=custom_callbacks(),
-        gradient_clip_val=cfg["trainer"]["gradient_clipping"],
+        **cfg["trainer"],
     )
 
     # Lightning tuner

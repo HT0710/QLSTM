@@ -10,14 +10,20 @@ num_workers: 0.8
 # Config dataset
 data:
   data_path: qlstm/data/place_1_new.xlsx
-  time_steps: 12
+  batch_size: 32
+  time_steps: 6
   data_limit: null
   split_size: [0.7, 0.2, 0.1]
 
 # Config model
 model:
+  checkpoint: null
   pretrained: false
   freeze: false
+
+# Config optimizer
+optimizer:
+  lr: 1e-3
 
 # Config scheduler
 scheduler:
@@ -26,9 +32,7 @@ scheduler:
 
 # Config trainer
 trainer:
-  batch_size: 32
-  learning_rate: 1e-3
-  num_epoch: 50
-  checkpoint: null
+  accelerator: cpu
+  max_epochs: 50
   precision: 32-true
-  gradient_clipping: null
+  gradient_clip_val: null

@@ -29,6 +29,7 @@ class LitModel(LightningModule):
         scheduler: List[lr_scheduler.LRScheduler] = None,
         checkpoint: str = None,
         device: str = "auto",
+        **kwargs,
     ):
         """
         Initialize the Lightning Model.
