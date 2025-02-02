@@ -8,28 +8,13 @@ class LSTMCell(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
 
-        self.W_ih = nn.Parameter(torch.Tensor(4 * hidden_size, input_size))
-        self.W_hh = nn.Parameter(torch.Tensor(4 * hidden_size, hidden_size))
-        self.b_ih = nn.Parameter(torch.Tensor(4 * hidden_size))
-        self.b_hh = nn.Parameter(torch.Tensor(4 * hidden_size))
-
-        self._init_weights()
-
-    def _init_weights(self):
-        nn.init.xavier_uniform_(self.W_ih)
-        nn.init.xavier_uniform_(self.W_hh)
-        nn.init.zeros_(self.b_ih)
-        nn.init.zeros_(self.b_hh)
+        self.ih = nn.Linear(input_size, 4 * hidden_size)
+        self.hh = nn.Linear(hidden_size, 4 * hidden_size)
 
     def forward(self, x: torch.Tensor, hidden):
         h_prev, c_prev = hidden
 
-        gates = (
-            torch.matmul(x, self.W_ih.t())
-            + torch.matmul(h_prev, self.W_hh.t())
-            + self.b_ih
-            + self.b_hh
-        )
+        gates = self.ih(x) + self.hh(h_prev)
 
         input_gate, forget_gate, cell_gate, output_gate = gates.chunk(4, dim=1)
 
@@ -60,24 +45,23 @@ class LSTM(nn.Module):
         batch_size, seq_len, _ = x.size()
 
         if hidden is None:
-            h = [
-                torch.zeros(batch_size, self.hidden_size, device=x.device)
+            hidden = [
+                (
+                    torch.zeros(batch_size, self.hidden_size, device=x.device),
+                    torch.zeros(batch_size, self.hidden_size, device=x.device),
+                )
                 for _ in range(self.num_layers)
             ]
-            c = [
-                torch.zeros(batch_size, self.hidden_size, device=x.device)
-                for _ in range(self.num_layers)
-            ]
-        else:
-            h, c = hidden
 
         outputs = []
         for t in range(seq_len):
-            x_t = x[:, t]
-            for i, cell in enumerate(self.cells):
-                h[i], c[i] = cell(x_t, (h[i], c[i]))
-                x_t = h[i]
-            outputs.append(h[-1])
+            x_t = x[:, t, :]
+            for i in range(self.num_layers):
+                h, c = self.cells[i](x_t, hidden[i])
+                hidden[i] = (h, c)
+                x_t = h
+            outputs.append(h)
 
         outputs = torch.stack(outputs, dim=1)
-        return outputs, (h, c)
+
+        return outputs, hidden
