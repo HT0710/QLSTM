@@ -1,7 +1,9 @@
+from collections import defaultdict
 from datetime import datetime
 from typing import List, Union
 
 import lightning.pytorch.callbacks as cb
+import numpy as np
 import rootutils
 from lightning.pytorch import LightningModule, Trainer
 from rich import print
@@ -15,7 +17,7 @@ class PrintResult(cb.Callback):
     def __init__(self) -> None:
         super().__init__()
         self.start = -1
-        self.prev = {}
+        self.history = defaultdict(list)
 
     def _format_with_trend(
         self,
@@ -25,8 +27,8 @@ class PrintResult(cb.Callback):
         up_green: bool = True,
     ) -> str:
         # Store the previous value and get the trend
-        prev_value = self.prev.get(name, value)
-        self.prev[name] = value
+        prev_value = self.history.get(name, [value])[-1]
+        self.history[name].append(float(value))
 
         # Check current vs previous
         if value > prev_value:
@@ -59,20 +61,36 @@ class PrintResult(cb.Callback):
         total = datetime.now() - self.start
 
         with open(f"{trainer.logger.log_dir}/info.txt", "a") as f:
-            f.write(
-                "\n".join(
-                    [
-                        f"Start at: {self._format_time(self.start)}",
-                        f"End at: {self._format_time(datetime.now())}",
-                        f"Total training time: {total.total_seconds():.3f} seconds",
-                    ]
-                )
+            i_best_tl = np.argmin(self.history["train_loss"])
+            best_tl = self.history["train_loss"][i_best_tl]
+
+            i_best_vl = np.argmin(self.history["val_loss"])
+            best_vl = self.history["val_loss"][i_best_vl]
+
+            summary = "\n".join(
+                [
+                    "-" * 10,
+                    f"Start at: {self._format_time(self.start)}",
+                    f"End at: {self._format_time(datetime.now())}",
+                    "-" * 5,
+                    f"Total training time: {total.total_seconds():.3f} seconds",
+                    f"Average epoch time: {np.mean(self.history['time']):.3f} seconds",
+                    "-" * 5,
+                    "Best:",
+                    f"  - Train loss: {best_tl:.4f} at Epoch: {i_best_tl}",
+                    f"  - Val loss: {best_vl:.4f} at Epoch: {i_best_vl}",
+                    "-" * 10,
+                ]
             )
+
+            f.write(summary)
+
+            print(f"\n[bold]Summary:[/]\n{summary}\n")
 
     def on_train_epoch_start(
         self, trainer: Trainer, pl_module: LightningModule
     ) -> None:
-        self.prev["time"] = datetime.now()
+        self.history["time"].append(datetime.now())
 
     def on_train_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         epoch = trainer.current_epoch
@@ -103,6 +121,9 @@ class PrintResult(cb.Callback):
 
         print(" ".join(output))
 
+        delta_time = (datetime.now() - self.history["time"][-1]).total_seconds()
+        self.history["time"][-1] = delta_time
+
         with open(f"{trainer.logger.log_dir}/train.csv", "a") as f:
             lr_values = ",".join(
                 f"{optim.param_groups[0]['lr']:.2e}" for optim in trainer.optimizers
@@ -111,7 +132,7 @@ class PrintResult(cb.Callback):
                 f"{epoch},{lr_values},"
                 f"{results['train/loss']:.5f},{results['train/rmse']:.4f},"
                 f"{results['val/loss']:.5f},{results['val/rmse']:.4f},"
-                f"{(datetime.now() - self.prev['time']).total_seconds():.3f}\n"
+                f"{delta_time:.3f}\n"
             )
 
     def on_test_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
