@@ -79,7 +79,7 @@ class LitModel(LightningModule):
         y : torch.Tensor
             The true labels.
         """
-        rmse = torch.sqrt(mean_squared_error(preds=y_hat, target=y, num_outputs=1))
+        rmse = mean_squared_error(preds=y_hat, target=y, squared=False, num_outputs=1)
         self.log_dict(
             {f"{stage}/loss": loss, f"{stage}/rmse": rmse}, on_step=False, on_epoch=True
         )
