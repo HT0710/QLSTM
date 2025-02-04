@@ -21,26 +21,14 @@ class sLSTMCell(nn.Module):
           https://arxiv.org/abs/2405.04517
     """
 
-    def __init__(self, input_size: int, hidden_size: int, bias: bool = True) -> None:
+    def __init__(self, input_size: int, hidden_size: int) -> None:
         super().__init__()
 
         # Store the input and hidden size
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.bias = bias
 
-        # Combine the Weights and Recurrent weights into a single matrix
-        self.W = nn.Parameter(
-            nn.init.xavier_uniform_(
-                torch.randn(self.input_size + self.hidden_size, 4 * self.hidden_size)
-            ),
-            requires_grad=True,
-        )
-        # Combine the Bias into a single matrix
-        if self.bias:
-            self.B = nn.Parameter(
-                (torch.zeros(4 * self.hidden_size)), requires_grad=True
-            )
+        self.linear = nn.Linear(input_size + hidden_size, 4 * hidden_size)
 
     def forward(
         self,
@@ -61,11 +49,7 @@ class sLSTMCell(nn.Module):
         # Combine the weights and the input
         combined = torch.cat((x, h), dim=1)  # (batch_size, input_size + hidden_size)
         # Calculate the linear transformation
-        gates = torch.matmul(combined, self.W)  # (batch_size, 4 * hidden_size)
-
-        # Add the bias if included
-        if self.bias:
-            gates += self.B
+        gates = self.linear(combined)
 
         # Split the gates into the input, forget, output and stabilization gates
         z_tilda, i_tilda, f_tilda, o_tilda = torch.split(gates, self.hidden_size, dim=1)
@@ -93,15 +77,8 @@ class sLSTMCell(nn.Module):
 
         # Calculate the new hidden state
         h_t = o_t * h_tilda  # (batch_size, hidden_size)
-        return (
-            h_t,
-            (
-                h_t,
-                c_t,
-                n_t,
-                m_t,
-            ),
-        )  # (batch_size, hidden_size), (batch_size, hidden_size), (batch_size, hidden_size), (batch_size, hidden_size)
+
+        return h_t, c_t, n_t, m_t
 
     def init_hidden(
         self, batch_size: int, **kwargs
@@ -141,13 +118,7 @@ class sLSTM(nn.Module):
           https://arxiv.org/abs/2405.04517
     """
 
-    def __init__(
-        self,
-        input_size: int,
-        hidden_size: int,
-        num_layers: int,
-        bias: bool = True,
-    ) -> None:
+    def __init__(self, input_size: int, hidden_size: int, num_layers: int) -> None:
         """
         Initializes the sLSTM.
 
@@ -155,17 +126,15 @@ class sLSTM(nn.Module):
             input_size (int): The size of the input features.
             hidden_size (int): The size of the hidden state.
             num_layers (int): The number of layers in the model.
-            bias (bool, optional): Indicates whether bias is included in the calculations. Default is True.
         """
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.bias = bias
 
         self.cells = nn.ModuleList(
             [
-                sLSTMCell(input_size if layer == 0 else hidden_size, hidden_size, bias)
+                sLSTMCell(input_size if layer == 0 else hidden_size, hidden_size)
                 for layer in range(num_layers)
             ]
         )
@@ -191,46 +160,24 @@ class sLSTM(nn.Module):
             torch.Tensor: Output tensor of shape (batch_size, hidden_size)
             tuple: Tuple containing the hidden states at each layer and each time step.
         """
+        batch_size, seq_length, features_size = x.size()
+
         # Initialize the hidden states if not provided
         if hidden_states is None:
-            hidden_states = self.init_hidden(x.size(1), device=x.device, dtype=x.dtype)
-        else:
-            # Check if the hidden states are of the correct length
-            if len(hidden_states) != self.num_layers:
-                raise ValueError(
-                    f"Expected hidden states of length {self.num_layers}, but got {len(hidden_states)}"
-                )
-            if any(state[0].size(0) != x.size(1) for state in hidden_states):
-                raise ValueError(
-                    f"Expected hidden states of batch size {x.size(1)}, but got {hidden_states[0][0].size(0)}"
-                )
+            hidden_states = self.init_hidden(batch_size, device=x.device, dtype=x.dtype)
 
-        H, C, N, M = [], [], [], []
+        outputs = []
+        for t in range(seq_length):
+            x_t = x[:, t, :]
+            for i in range(self.num_layers):
+                h_t, c_t, n_t, m_t = self.cells[i](x_t, hidden_states[i])
+                hidden_states[i] = (h_t, c_t, n_t, m_t)
+                x_t = h_t
+            outputs.append(h_t)
 
-        for layer, cell in enumerate(self.cells):
-            lh, lc, ln, lm = [], [], [], []
-            for t in range(x.size(0)):
-                h_t, hidden_states[layer] = (
-                    cell(x[t], hidden_states[layer])
-                    if layer == 0
-                    else cell(H[layer - 1][t], hidden_states[layer])
-                )
-                lh.append(h_t)
-                lc.append(hidden_states[layer][0])
-                ln.append(hidden_states[layer][1])
-                lm.append(hidden_states[layer][2])
+        outputs = torch.stack(outputs, dim=1)
 
-            H.append(torch.stack(lh, dim=0))
-            C.append(torch.stack(lc, dim=0))
-            N.append(torch.stack(ln, dim=0))
-            M.append(torch.stack(lm, dim=0))
-
-        H = torch.stack(H, dim=0)
-        C = torch.stack(C, dim=0)
-        N = torch.stack(N, dim=0)
-        M = torch.stack(M, dim=0)
-
-        return H[-1], (H, C, N, M)
+        return outputs, hidden_states
 
     def init_hidden(
         self, batch_size: int, **kwargs
