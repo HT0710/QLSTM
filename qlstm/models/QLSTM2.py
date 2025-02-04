@@ -17,9 +17,11 @@ class QLSTM(nn.Module):
         self.hidden_size = hidden_size
         self.n_qubits = n_qubits
         self.n_qlayers = n_qlayers
+        self.n_vrotations = 3  # Number of ratations for Variational layer.
+        self.n_esteps = 1  # Number of steps for Entangling layer pairs.
         self.backend = backend  # "default.qubit", "qiskit.basicaer", "qiskit.ibm"
 
-        self.wires_forget = [f"wire_forget_{i}" for i in range(self.n_qubits)]
+        self.wires_forget = [f"wire_forget_{i}" for i in range(self.n_qubits * 4)]
         self.wires_input = [f"wire_input_{i}" for i in range(self.n_qubits)]
         self.wires_update = [f"wire_update_{i}" for i in range(self.n_qubits)]
         self.wires_output = [f"wire_output_{i}" for i in range(self.n_qubits)]
@@ -31,38 +33,60 @@ class QLSTM(nn.Module):
 
         @qml.qnode(self.dev_forget, interface="torch")
         def _circuit_forget(inputs, weights):
-            qml.AngleEmbedding(inputs, wires=self.wires_forget)
-            qml.BasicEntanglerLayers(weights, wires=self.wires_forget)
-            return [qml.expval(qml.PauliZ(wires=w)) for w in self.wires_forget]
+            self._VQC(inputs, weights, self.wires_forget)
+            return [qml.expval(qml.PauliZ(wires=i)) for i in self.wires_forget]
 
         @qml.qnode(self.dev_input, interface="torch")
         def _circuit_input(inputs, weights):
-            qml.AngleEmbedding(inputs, wires=self.wires_input)
-            qml.BasicEntanglerLayers(weights, wires=self.wires_input)
-            return [qml.expval(qml.PauliZ(wires=w)) for w in self.wires_input]
+            self._VQC(inputs, weights, self.wires_input)
+            return [qml.expval(qml.PauliZ(wires=i)) for i in self.wires_input]
 
         @qml.qnode(self.dev_update, interface="torch")
         def _circuit_update(inputs, weights):
-            qml.AngleEmbedding(inputs, wires=self.wires_update)
-            qml.BasicEntanglerLayers(weights, wires=self.wires_update)
-            return [qml.expval(qml.PauliZ(wires=w)) for w in self.wires_update]
+            self._VQC(inputs, weights, self.wires_update)
+            return [qml.expval(qml.PauliZ(wires=i)) for i in self.wires_update]
 
         @qml.qnode(self.dev_output, interface="torch")
         def _circuit_output(inputs, weights):
-            qml.AngleEmbedding(inputs, wires=self.wires_output)
-            qml.BasicEntanglerLayers(weights, wires=self.wires_output)
-            return [qml.expval(qml.PauliZ(wires=w)) for w in self.wires_output]
+            self._VQC(inputs, weights, self.wires_output)
+            return [qml.expval(qml.PauliZ(wires=i)) for i in self.wires_output]
 
-        weight_shapes = {"weights": (n_qlayers, n_qubits)}
+        weight_shapes = {"weights": (self.n_qlayers, self.n_vrotations, self.n_qubits)}
 
-        self.clayer_in = torch.nn.Linear(self.n_inputs + self.hidden_size, n_qubits)
+        self.clayer_in = torch.nn.Linear(self.n_inputs + self.hidden_size, n_qubits * 4)
         self.VQC = {
             "forget": qml.qnn.TorchLayer(_circuit_forget, weight_shapes),
             "input": qml.qnn.TorchLayer(_circuit_input, weight_shapes),
             "update": qml.qnn.TorchLayer(_circuit_update, weight_shapes),
             "output": qml.qnn.TorchLayer(_circuit_output, weight_shapes),
         }
-        self.clayer_out = torch.nn.Linear(self.n_qubits, self.hidden_size)
+        self.clayer_out = torch.nn.Linear(self.n_qubits * 4, self.hidden_size)
+
+    def _ansatz(self, params, wires_type):
+        # Entangling layer.
+        for k in range(self.n_esteps):
+            for i in range(self.n_qubits):
+                qml.CNOT(wires=[wires_type[i], wires_type[(i + k + 1) % self.n_qubits]])
+
+        # Variational layer.
+        for i in range(self.n_qubits):
+            qml.RX(params[0][i], wires=wires_type[i])
+            qml.RY(params[1][i], wires=wires_type[i])
+            qml.RZ(params[2][i], wires=wires_type[i])
+
+    def _VQC(self, features, weights, wires_type):
+        # Pennylane uses batch in second dim
+        features = features.transpose(1, 0)
+
+        ry_params = [torch.arctan(feature) for feature in features]
+        rz_params = [torch.arctan(feature**2) for feature in features]
+        for i in range(self.n_qubits):
+            qml.Hadamard(wires=wires_type[i])
+            qml.RY(ry_params[i], wires=wires_type[i])
+            qml.RZ(rz_params[i], wires=wires_type[i])
+
+        # Variational block.
+        qml.layer(self._ansatz, self.n_qlayers, weights, wires_type=wires_type)
 
     def forward(self, x, hidden=None):
         batch_size, seq_length, features_size = x.size()
