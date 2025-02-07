@@ -2,19 +2,21 @@ import shutil
 
 import hydra
 import rootutils
+import seaborn as sns
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as ls
 from lightning.pytorch import Trainer, seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
+from matplotlib import pyplot as plt
 from omegaconf import DictConfig, open_dict
 from rich import traceback
 
 rootutils.autosetup()
 traceback.install()
 
-from models.QLSTM2 import QLSTM
+from models.CustomQLSTM import QLSTM
 from modules.callback import custom_callbacks
 from modules.data import CustomDataModule
 from modules.model import LitModel
@@ -39,9 +41,10 @@ def main(cfg: DictConfig) -> None:
     # Define model
     model = QLSTM(
         input_size=7,
-        hidden_size=128,
-        # seq_length=cfg["data"]["time_steps"],
-        n_qubits=4,
+        hidden_size=64,
+        seq_length=cfg["data"]["time_steps"],
+        n_qubits=2,
+        n_qlayers=1,
     )
 
     # Setup loss
@@ -91,7 +94,27 @@ def main(cfg: DictConfig) -> None:
     trainer.fit(lit_model, dataset)
 
     # Testing
-    trainer.test(lit_model, dataset)
+    trainer.test(lit_model, dataset, "best")
+
+    print(model.feature_weighting)
+    print(model.temporal_weighting)
+    print(model.magnitude)
+
+    plt.figure(figsize=(18, 10))
+
+    sns.heatmap(
+        (model.feature_weighting * model.temporal_weighting)
+        .squeeze(0)
+        .detach()
+        .numpy(),
+        cmap="coolwarm",
+        annot=True,
+        fmt=".2f",
+    )
+    plt.title("Weighted Matrix", fontsize=16)
+    plt.xlabel("Features", fontsize=14)
+    plt.ylabel("Times", fontsize=14)
+    plt.savefig(f"{trainer.log_dir}/weighted_matrix.png", dpi=300, bbox_inches="tight")
 
 
 if __name__ == "__main__":

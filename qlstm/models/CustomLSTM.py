@@ -8,23 +8,24 @@ class LSTMCell(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
 
-        self.ih = nn.Linear(input_size, 3 * hidden_size)
-        self.hh = nn.Linear(hidden_size, 3 * hidden_size)
+        self.fc = nn.Linear(input_size + hidden_size, 3 * hidden_size)
 
     def forward(self, x: torch.Tensor, hidden):
         h_prev, c_prev = hidden
 
-        gates: torch.Tensor = self.ih(x) + self.hh(h_prev)
+        combined = torch.cat((x, h_prev), dim=1)
 
-        i, c, o = gates.chunk(3, dim=1)
+        gates: torch.Tensor = self.fc(combined)
 
-        i = torch.sigmoid(i)
+        i, g, o = gates.chunk(3, dim=1)
+
         f = torch.sigmoid(c_prev)
-        c = torch.tanh(c)
+        i = torch.sigmoid(i)
+        g = torch.tanh(g)
         o = torch.sigmoid(o)
 
-        c = f * c_prev + i * c
-        h = o * torch.tanh(c)
+        c = f * c_prev + i * g
+        h = o * torch.tanh(c) * f
 
         return h, c
 
@@ -41,10 +42,11 @@ class LSTM(nn.Module):
                 for i in range(num_layers)
             ]
         )
-        self.features_weighting = nn.Parameter(torch.ones(1, 1, input_size))
-        self.times_weighting = nn.Parameter(torch.ones(1, seq_length, 1))
+        self.feature_weighting = nn.Parameter(torch.ones(1, 1, input_size))
+        self.temporal_weighting = nn.Parameter(torch.ones(1, seq_length, 1))
+        self.magnitude = nn.Parameter(torch.tensor(1.0))
 
-    def forward(self, x, hidden=None):
+    def forward(self, x: torch.Tensor, hidden=None):
         batch_size, seq_len, _ = x.size()
 
         if hidden is None:
@@ -56,7 +58,7 @@ class LSTM(nn.Module):
                 for _ in range(self.num_layers)
             ]
 
-        x = x * self.features_weighting * self.times_weighting
+        x = x * self.feature_weighting * self.temporal_weighting * self.magnitude.exp()
 
         outputs = []
         for t in range(seq_len):

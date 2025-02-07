@@ -21,7 +21,7 @@ class QLSTM(nn.Module):
         self.n_esteps = 1  # Number of steps for Entangling layer pairs.
         self.backend = backend  # "default.qubit", "qiskit.basicaer", "qiskit.ibm"
 
-        self.wires_forget = [f"wire_forget_{i}" for i in range(self.n_qubits * 4)]
+        self.wires_forget = [f"wire_forget_{i}" for i in range(self.n_qubits)]
         self.wires_input = [f"wire_input_{i}" for i in range(self.n_qubits)]
         self.wires_update = [f"wire_update_{i}" for i in range(self.n_qubits)]
         self.wires_output = [f"wire_output_{i}" for i in range(self.n_qubits)]
@@ -53,14 +53,14 @@ class QLSTM(nn.Module):
 
         weight_shapes = {"weights": (self.n_qlayers, self.n_vrotations, self.n_qubits)}
 
-        self.clayer_in = torch.nn.Linear(self.n_inputs + self.hidden_size, n_qubits * 4)
+        self.clayer_in = torch.nn.Linear(self.n_inputs + self.hidden_size, n_qubits)
         self.VQC = {
             "forget": qml.qnn.TorchLayer(_circuit_forget, weight_shapes),
             "input": qml.qnn.TorchLayer(_circuit_input, weight_shapes),
             "update": qml.qnn.TorchLayer(_circuit_update, weight_shapes),
             "output": qml.qnn.TorchLayer(_circuit_output, weight_shapes),
         }
-        self.clayer_out = torch.nn.Linear(self.n_qubits * 4, self.hidden_size)
+        self.clayer_out = torch.nn.Linear(self.n_qubits, self.hidden_size)
 
     def _ansatz(self, params, wires_type):
         # Entangling layer.

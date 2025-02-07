@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 from lightning.pytorch import LightningModule
+from lightning.pytorch.utilities import grad_norm
 from rich import print
 from torchmetrics.functional import mean_squared_error
 
@@ -61,6 +62,10 @@ class LitModel(LightningModule):
     @property
     def learning_rate(self) -> float:
         return self.optimizer[0].param_groups[0]["lr"]
+
+    def on_before_optimizer_step(self, optimizer):
+        norms = grad_norm(self.model, norm_type=2)
+        self.log_dict(norms)
 
     def _log(
         self, stage: str, loss: torch.Tensor, y_hat: torch.Tensor, y: torch.Tensor
