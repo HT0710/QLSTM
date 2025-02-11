@@ -8,13 +8,14 @@ class LSTMCell(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
 
-        self.ih = nn.Linear(input_size, 4 * hidden_size)
-        self.hh = nn.Linear(hidden_size, 4 * hidden_size)
+        self.fc = nn.Linear(input_size + hidden_size, 4 * hidden_size)
 
     def forward(self, x: torch.Tensor, hidden):
         h_prev, c_prev = hidden
 
-        gates = self.ih(x) + self.hh(h_prev)
+        combined = torch.cat((x, h_prev), dim=1)
+
+        gates: torch.Tensor = self.fc(combined)
 
         input_gate, forget_gate, cell_gate, output_gate = gates.chunk(4, dim=1)
 
