@@ -121,10 +121,6 @@ class CustomDataModule(LightningDataModule):
         # Clean up
         self.dataframe = data.dropna().drop_duplicates()
 
-        # Limit data
-        if self.data_limit:
-            data = self._limit_data(data)
-
         # Select data
         features = [
             "Measured Power",
@@ -137,6 +133,10 @@ class CustomDataModule(LightningDataModule):
         ]
 
         data = self.dataframe[features]
+
+        # Limit data
+        if self.data_limit:
+            data = self._limit_data(data)
 
         # Encode data
         for feature in features:
