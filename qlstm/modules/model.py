@@ -8,7 +8,12 @@ import torch.optim.lr_scheduler as lr_scheduler
 from lightning.pytorch import LightningModule
 from lightning.pytorch.utilities import grad_norm
 from rich import print
-from torchmetrics.functional import mean_squared_error
+from torchmetrics.functional import (
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    mean_squared_error,
+    r2_score,
+)
 
 from .utils import device_handler
 
@@ -84,9 +89,19 @@ class LitModel(LightningModule):
         y : torch.Tensor
             The true labels.
         """
-        rmse = mean_squared_error(preds=y_hat, target=y, squared=False, num_outputs=1)
+        metrics = {
+            "loss": loss,
+            "rmse": mean_squared_error(
+                preds=y_hat, target=y, squared=False, num_outputs=1
+            ),
+            "mae": mean_absolute_error(preds=y_hat, target=y, num_outputs=1),
+            "mape": mean_absolute_percentage_error(preds=y_hat, target=y),
+            "r2": r2_score(preds=y_hat, target=y),
+        }
         self.log_dict(
-            {f"{stage}/loss": loss, f"{stage}/rmse": rmse}, on_step=False, on_epoch=True
+            {f"{stage}/{k}": v for k, v in metrics.items()},
+            on_step=False,
+            on_epoch=True,
         )
 
     def configure_optimizers(
