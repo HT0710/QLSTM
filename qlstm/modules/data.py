@@ -37,6 +37,7 @@ class CustomDataModule(LightningDataModule):
         data_path: str,
         batch_size: int = 32,
         time_steps: int = 1,
+        overlap: bool = True,
         data_limit: Optional[float] = None,
         split_size: Sequence[float] = (0.75, 0.15, 0.1),
         num_workers: int = 0,
@@ -59,6 +60,7 @@ class CustomDataModule(LightningDataModule):
         super().__init__()
         self.data_path = Path(data_path)
         self.time_steps = time_steps
+        self.overlap = overlap
         self.data_limit = self._check_limit(data_limit)
         self.split_size = split_size
         self.loader_config = {
@@ -157,16 +159,11 @@ class CustomDataModule(LightningDataModule):
         labels = data[["Measured Power"]].values
 
         # Create time steps
-        inputs = [
-            inputs[i : i + self.time_steps]
-            for i in range(len(inputs) - self.time_steps)
-        ]
-        inputs = np.array(inputs)
-
-        labels = [
-            labels[i + self.time_steps] for i in range(len(labels) - self.time_steps)
-        ]
-        labels = np.array(labels)
+        _range = range(
+            0, len(inputs) - self.time_steps, 1 if self.overlap else self.time_steps
+        )
+        inputs = np.array([inputs[i : i + self.time_steps] for i in _range])
+        labels = np.array([labels[i + self.time_steps] for i in _range])
 
         # Train, val, test split
         X_train, X_temp, y_train, y_temp = train_test_split(
