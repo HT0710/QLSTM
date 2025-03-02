@@ -10,16 +10,15 @@ num_workers: 0.8
 # Config dataset
 data:
   data_path: qlstm/data/place_1_new.xlsx
-  batch_size: 32
-  time_steps: 6
+  batch_size: 1
+  time_steps: 1
+  overlap: false
   data_limit: null
-  split_size: [0.7, 0.2, 0.1]
+  split_size: [0.7, 0.3, 0]
 
 # Config model
 model:
   checkpoint: null
-  pretrained: false
-  freeze: false
 
 # Config optimizer
 optimizer:
@@ -27,12 +26,18 @@ optimizer:
 
 # Config scheduler
 scheduler:
-  warmup_epochs: 5
+  warmup_epochs: 3
   start_factor: 0.01
 
 # Config trainer
 trainer:
-  accelerator: cpu
-  max_epochs: 50
+  accelerator: auto
+  max_epochs: 25
   precision: 32-true
   gradient_clip_val: null
+
+# Config logger
+logger:
+  save_dir: ./lightning_logs
+  name: LSTM
+  version: null
