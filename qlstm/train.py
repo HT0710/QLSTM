@@ -1,22 +1,22 @@
 import shutil
+from pathlib import Path
 
 import hydra
 import rootutils
-import seaborn as sns
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as ls
 from lightning.pytorch import Trainer, seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
-from matplotlib import pyplot as plt
 from omegaconf import DictConfig, open_dict
 from rich import traceback
+from rich.prompt import Prompt
 
 rootutils.autosetup()
 traceback.install()
 
-from models.CustomQLSTM import QLSTM
+from models.LSTM import LSTM
 from modules.callback import custom_callbacks
 from modules.data import CustomDataModule
 from modules.model import LitModel
@@ -39,12 +39,10 @@ def main(cfg: DictConfig) -> None:
     dataset = CustomDataModule(**cfg["data"])
 
     # Define model
-    model = QLSTM(
+    model = LSTM(
         input_size=7,
-        hidden_size=64,
-        seq_length=cfg["data"]["time_steps"],
-        n_qubits=2,
-        n_qlayers=1,
+        hidden_size=128,
+        # n_qubits=2,
     )
 
     # Setup loss
@@ -73,16 +71,22 @@ def main(cfg: DictConfig) -> None:
     # Save config
     with open_dict(cfg):
         cfg["model"]["name"] = model._get_name()
+        cfg["logger"]["name"] = cfg["logger"]["name"] or model._get_name()
         if hasattr(model, "version"):
             cfg["model"]["version"] = model.version
     lit_model.save_hparams(cfg)
 
+    # Config logger
+    logger = TensorBoardLogger(default_hp_metric=False, **cfg["logger"])
+    if Path(logger.log_dir).exists():
+        choice = Prompt.ask(
+            f'Log directory [green]"{logger.log_dir}"[/] exists! [red]Overwrite[/]?',
+            choices=["y", "n"],
+        )
+        shutil.rmtree(logger.log_dir) if choice == "y" else exit(1)
+
     # Lightning trainer
-    trainer = Trainer(
-        logger=TensorBoardLogger(save_dir="."),
-        callbacks=custom_callbacks(),
-        **cfg["trainer"],
-    )
+    trainer = Trainer(logger=logger, callbacks=custom_callbacks(), **cfg["trainer"])
 
     # Lightning tuner
     # tuner = Tuner(trainer)
@@ -94,27 +98,7 @@ def main(cfg: DictConfig) -> None:
     trainer.fit(lit_model, dataset)
 
     # Testing
-    trainer.test(lit_model, dataset, "best")
-
-    print(model.feature_weighting)
-    print(model.temporal_weighting)
-    print(model.magnitude)
-
-    plt.figure(figsize=(18, 10))
-
-    sns.heatmap(
-        (model.feature_weighting * model.temporal_weighting)
-        .squeeze(0)
-        .detach()
-        .numpy(),
-        cmap="coolwarm",
-        annot=True,
-        fmt=".2f",
-    )
-    plt.title("Weighted Matrix", fontsize=16)
-    plt.xlabel("Features", fontsize=14)
-    plt.ylabel("Times", fontsize=14)
-    plt.savefig(f"{trainer.log_dir}/weighted_matrix.png", dpi=300, bbox_inches="tight")
+    # trainer.test(lit_model, dataset, "best")
 
 
 if __name__ == "__main__":
