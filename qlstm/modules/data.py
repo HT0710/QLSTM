@@ -67,6 +67,8 @@ class CustomDataModule(LightningDataModule):
             "batch_size": batch_size,
             "num_workers": workers_handler(num_workers),
             "pin_memory": pin_memory,
+            "shuffle": False,
+            "drop_last": True,
         }
         self.encoder = {}
 
@@ -189,12 +191,10 @@ class CustomDataModule(LightningDataModule):
             self._summary()
 
     def train_dataloader(self):
-        return DataLoader(
-            dataset=self.train_set, **self.loader_config, shuffle=False, drop_last=True
-        )
+        return DataLoader(dataset=self.train_set, **self.loader_config)
 
     def val_dataloader(self):
-        return DataLoader(dataset=self.val_set, **self.loader_config, shuffle=False)
+        return DataLoader(dataset=self.val_set, **self.loader_config)
 
     def test_dataloader(self):
-        return DataLoader(dataset=self.test_set, **self.loader_config, shuffle=False)
+        return DataLoader(dataset=self.test_set, **self.loader_config)
