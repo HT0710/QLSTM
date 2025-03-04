@@ -8,7 +8,7 @@ class LSTMCell(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
 
-        self.fc = nn.Linear(input_size + hidden_size, 3 * hidden_size)
+        self.fc = nn.Linear(input_size + hidden_size, 4 * hidden_size)
 
     def forward(self, x: torch.Tensor, hidden):
         h_prev, c_prev = hidden
@@ -17,39 +17,36 @@ class LSTMCell(nn.Module):
 
         gates: torch.Tensor = self.fc(combined)
 
-        i, g, o = gates.chunk(3, dim=1)
+        input_gate, forget_gate, cell_gate, output_gate = gates.chunk(4, dim=1)
 
-        f = torch.sigmoid(c_prev)
-        i = torch.sigmoid(i)
-        g = torch.tanh(g)
-        o = torch.sigmoid(o)
+        input_gate = torch.sigmoid(input_gate)
+        forget_gate = torch.sigmoid(forget_gate + c_prev)
+        cell_gate = torch.tanh(cell_gate)
+        output_gate = torch.sigmoid(output_gate)
 
-        c = f * c_prev + i * g
-        h = o * torch.tanh(c) * f
+        c_next = forget_gate * c_prev + input_gate * cell_gate
+        h_next = output_gate * torch.tanh(c_next)
 
-        return h, c
+        return h_next, c_next
 
 
 class LSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, seq_length, num_layers=1):
+    def __init__(self, input_size, hidden_size, num_layers=1):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.seq_length = seq_length
         self.cells = nn.ModuleList(
             [
                 LSTMCell(input_size if i == 0 else hidden_size, hidden_size)
                 for i in range(num_layers)
             ]
         )
-        self.feature_weighting = nn.Parameter(torch.ones(1, 1, input_size))
-        self.temporal_weighting = nn.Parameter(torch.ones(1, seq_length, 1))
-        self.magnitude = nn.Parameter(torch.tensor(1.0))
+        self.efw = nn.Parameter(torch.ones(1, 1, input_size))
 
-    def forward(self, x: torch.Tensor, hidden=None):
+    def forward(self, x, hidden=None):
         batch_size, seq_len, _ = x.size()
 
-        if hidden is None:
+        if not hidden:
             hidden = [
                 (
                     torch.zeros(batch_size, self.hidden_size, device=x.device),
@@ -58,7 +55,7 @@ class LSTM(nn.Module):
                 for _ in range(self.num_layers)
             ]
 
-        x = x * self.feature_weighting * self.temporal_weighting * self.magnitude.exp()
+        x = x * self.efw.exp()
 
         outputs = []
         for t in range(seq_len):
