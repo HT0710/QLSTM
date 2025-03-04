@@ -35,7 +35,12 @@ class LSTM(nn.Module):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.cell = LSTMCell(input_size, hidden_size)
+        self.cells = nn.ModuleList(
+            [
+                LSTMCell(input_size if i == 0 else hidden_size, hidden_size)
+                for i in range(num_layers)
+            ]
+        )
         self.hidden = None
 
     def forward(self, x):

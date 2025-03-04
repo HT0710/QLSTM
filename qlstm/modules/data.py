@@ -1,5 +1,6 @@
 from pathlib import Path
-from typing import Optional, Sequence
+from collections import defaultdict
+from typing import Callable, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -8,7 +9,7 @@ from lightning.pytorch import LightningDataModule
 from rich import print
 from rich.table import Table
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
 
 from modules.utils import workers_handler
@@ -38,6 +39,7 @@ class CustomDataModule(LightningDataModule):
         batch_size: int = 32,
         time_steps: int = 1,
         overlap: bool = True,
+        scaler: Callable = StandardScaler,
         data_limit: Optional[float] = None,
         split_size: Sequence[float] = (0.75, 0.15, 0.1),
         num_workers: int = 0,
@@ -61,6 +63,7 @@ class CustomDataModule(LightningDataModule):
         self.data_path = Path(data_path)
         self.time_steps = time_steps
         self.overlap = overlap
+        self.scaler = scaler
         self.data_limit = self._check_limit(data_limit)
         self.split_size = split_size
         self.loader_config = {
@@ -70,7 +73,7 @@ class CustomDataModule(LightningDataModule):
             "shuffle": False,
             "drop_last": True,
         }
-        self.encoder = {}
+        self.encoder = defaultdict(lambda: self.scaler())
 
     @staticmethod
     def _check_limit(value: Optional[float]) -> Optional[float]:
@@ -127,6 +130,7 @@ class CustomDataModule(LightningDataModule):
 
         # Select data
         features = [
+            "Hour",
             "Measured Power",
             "NWP Radiation",
             "NWP Rainfall",
@@ -143,13 +147,13 @@ class CustomDataModule(LightningDataModule):
             data = self._limit_data(data)
 
         # Encode data
-        for feature in features:
-            self.encoder[feature] = MinMaxScaler()
-            data.loc[:, feature] = (
-                self.encoder[feature]
-                .fit_transform(data[[feature]].values)
-                .astype("object")
-            )
+        if self.scaler:
+            for feature in features:
+                if feature == "Hour":
+                    continue
+                data.loc[:, feature] = self.encoder[feature].fit_transform(
+                    data[[feature]].values
+                )
 
         # Shift data
         data.loc[:, "Measured Power"] = data["Measured Power"].shift(1)

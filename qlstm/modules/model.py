@@ -10,9 +10,7 @@ from lightning.pytorch.utilities import grad_norm
 from rich import print
 from torchmetrics.functional import (
     mean_absolute_error,
-    mean_absolute_percentage_error,
     mean_squared_error,
-    r2_score,
 )
 
 from .utils import device_handler
@@ -95,8 +93,6 @@ class LitModel(LightningModule):
                 preds=y_hat, target=y, squared=False, num_outputs=1
             ),
             "mae": mean_absolute_error(preds=y_hat, target=y, num_outputs=1),
-            "mape": mean_absolute_percentage_error(preds=y_hat, target=y),
-            "r2": r2_score(preds=y_hat, target=y),
         }
         self.log_dict(
             {f"{stage}/{k}": v for k, v in metrics.items()},

@@ -16,7 +16,7 @@ class SequentialLR(SequentialLR):
 def scheduler_with_warmup(
     scheduler: Optimizer, warmup_epochs: int, start_factor: float = 0.1
 ):
-    if warmup_epochs == 0:
+    if warmup_epochs <= 1:
         return scheduler
 
     warmup_scheduler = LambdaLR(

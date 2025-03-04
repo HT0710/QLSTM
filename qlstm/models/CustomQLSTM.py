@@ -8,29 +8,26 @@ class QLSTM(nn.Module):
         self,
         input_size,
         hidden_size,
-        seq_length,
         n_qubits=4,
         n_qlayers=1,
+        n_esteps=1,
         backend="default.qubit",
     ):
         super(QLSTM, self).__init__()
         self.n_inputs = input_size
         self.hidden_size = hidden_size
-        self.seq_length = seq_length
-        self.n_qubits = n_qubits * 3
+        self.n_qubits = n_qubits  # qubits of 3 gates are combined
         self.n_qlayers = n_qlayers
         self.n_vrotations = 3  # Number of ratations for Variational layer
-        self.n_esteps = 1  # Number of steps for Entangling layer pairs
+        self.n_esteps = n_esteps  # Number of steps for Entangling layer pairs
         self.backend = backend
 
-        # Weighted matrix
+        # Weighted features
         self.feature_weighting = nn.Parameter(torch.ones(1, 1, input_size))
-        self.temporal_weighting = nn.Parameter(torch.ones(1, seq_length, 1))
-        self.magnitude = nn.Parameter(torch.tensor(1.0))
 
         # Accessway
         self.entry = nn.Linear(input_size + hidden_size, self.n_qubits)
-        self.exit = nn.Linear(self.n_qubits, self.hidden_size * 3)
+        self.exit = nn.Linear(self.n_qubits, self.hidden_size * 4)
 
         # Variational quantum circuit
         self.wires = [i for i in range(self.n_qubits)]
@@ -81,11 +78,7 @@ class QLSTM(nn.Module):
             h_t = h[0]
             c_t = c[0]
 
-        weighted_matrix = (
-            self.feature_weighting * self.temporal_weighting * self.magnitude.exp()
-        )
-
-        x = x * weighted_matrix
+        x = x * self.feature_weighting.exp()
 
         outputs = []
         for t in range(seq_length):
@@ -95,19 +88,19 @@ class QLSTM(nn.Module):
 
             qubits = self.entry(combined)
 
-            vqc = self.VQC(qubits)
+            qubits = self.VQC(qubits)
 
-            gates = self.exit(vqc)
+            gates = self.exit(qubits)
 
-            i, g, o = gates.chunk(chunks=3, dim=1)
+            f, i, g, o = gates.chunk(chunks=4, dim=1)
 
-            f_t = torch.sigmoid(c_t)
+            f_t = torch.sigmoid(f + c_t)
             i_t = torch.sigmoid(i)
             g_t = torch.tanh(g)
             o_t = torch.sigmoid(o)
 
             c_t = (f_t * c_t) + (i_t * g_t)
-            h_t = o_t * torch.tanh(c_t) * f_t
+            h_t = o_t * torch.tanh(c_t)
 
             outputs.append(h_t)
 
