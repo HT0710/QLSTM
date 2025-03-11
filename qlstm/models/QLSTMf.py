@@ -61,6 +61,7 @@ class QLSTM(nn.Module):
             "output": qml.qnn.TorchLayer(_circuit_output, weight_shapes),
         }
         self.clayer_out = torch.nn.Linear(self.n_qubits, self.hidden_size)
+        self.hidden = None
 
     def _ansatz(self, params, wires_type):
         # Entangling layer.
@@ -91,32 +92,30 @@ class QLSTM(nn.Module):
     def forward(self, x, hidden=None):
         batch_size, seq_length, features_size = x.size()
 
-        if hidden is None:
-            h_t = torch.zeros(batch_size, self.hidden_size, device=x.device)
-            c_t = torch.zeros(batch_size, self.hidden_size, device=x.device)
-        else:
-            h_t, c_t = hidden
-            h_t = h_t[0]
-            c_t = c_t[0]
+        if not self.hidden:
+            self.hidden = (
+                torch.zeros(batch_size, self.hidden_size, device=x.device),
+                torch.zeros(batch_size, self.hidden_size, device=x.device),
+            )
 
-        outputs = []
-        for t in range(seq_length):
-            x_t = x[:, t, :]
+        h_prev, c_prev = self.hidden
 
-            v_t = torch.cat((h_t, x_t), dim=1)
+        x_t = x.squeeze(1)
 
-            y_t = self.clayer_in(v_t)
+        v_t = torch.cat((h_prev, x_t), dim=1)
 
-            f_t = torch.sigmoid(self.clayer_out(self.VQC["forget"](y_t)))
-            i_t = torch.sigmoid(self.clayer_out(self.VQC["input"](y_t)))
-            g_t = torch.tanh(self.clayer_out(self.VQC["update"](y_t)))
-            o_t = torch.sigmoid(self.clayer_out(self.VQC["output"](y_t)))
+        y_t = self.clayer_in(v_t)
 
-            c_t = (f_t * c_t) + (i_t * g_t)
-            h_t = o_t * torch.tanh(c_t)
+        f_t = torch.sigmoid(self.clayer_out(self.VQC["forget"](y_t)))
+        i_t = torch.sigmoid(self.clayer_out(self.VQC["input"](y_t)))
+        g_t = torch.tanh(self.clayer_out(self.VQC["update"](y_t)))
+        o_t = torch.sigmoid(self.clayer_out(self.VQC["output"](y_t)))
 
-            outputs.append(h_t)
+        c_t = (f_t * c_prev) + (i_t * g_t)
+        h_t = o_t * torch.tanh(c_t)
 
-        outputs = torch.stack(outputs, dim=1)
+        outputs = h_t.unsqueeze(1)
+
+        self.hidden = (h_t.detach(), c_t.detach())
 
         return outputs, (h_t, c_t)

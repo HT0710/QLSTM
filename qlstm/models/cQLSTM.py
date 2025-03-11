@@ -88,7 +88,7 @@ class QLSTM(nn.Module):
 
             qubits = self.entry(combined)
 
-            qubits = self.VQC(qubits)
+            # qubits = self.VQC(qubits)
 
             gates = self.exit(qubits)
 
