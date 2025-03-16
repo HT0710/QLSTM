@@ -9,10 +9,13 @@ num_workers: 0.8
 
 # Config dataset
 data:
-  data_path: qlstm/data/place_1_new.xlsx
-  batch_size: 1
-  time_steps: 1
-  overlap: false
+  data_path: qlstm/data/Albany_WA.csv
+  features: "5-11"
+  labels: [11]
+  batch_size: 1024
+  time_steps: 24
+  overlap: true
+  n_future: 1
   data_limit: null
   split_size: [0.7, 0.3, 0]
 
@@ -32,8 +35,8 @@ scheduler:
 # Config trainer
 trainer:
   accelerator: auto
-  max_epochs: 25
-  precision: 32-true
+  max_epochs: 20
+  precision: 16-mixed
   gradient_clip_val: null
 
 # Config logger

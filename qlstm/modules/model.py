@@ -28,6 +28,7 @@ class LitModel(LightningModule):
     def __init__(
         self,
         model: nn.Module,
+        output_size: int = 1,
         criterion: nn.Module = None,
         optimizer: List[optim.Optimizer] = None,
         scheduler: List[lr_scheduler.LRScheduler] = None,
@@ -55,7 +56,8 @@ class LitModel(LightningModule):
         """
         super().__init__()
         self.model = model
-        self.fc = nn.Linear(model.hidden_size, 1)
+        self.output_size = output_size
+        self.fc = nn.Linear(model.hidden_size, self.output_size)
         self.criterion = criterion
         self.optimizer = optimizer
         self.scheduler = scheduler

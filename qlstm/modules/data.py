@@ -2,7 +2,7 @@ from pathlib import Path
 from collections import defaultdict
 import re
 from typing import Callable, List, Optional, Sequence
-
+from numpy.lib.stride_tricks import sliding_window_view
 import numpy as np
 from omegaconf import ListConfig
 import pandas as pd
@@ -42,6 +42,7 @@ class CustomDataModule(LightningDataModule):
         batch_size: int = 1,
         time_steps: int = 1,
         overlap: bool = True,
+        n_future: int = 1,
         scaler: Callable = StandardScaler(),
         data_limit: Optional[float] = None,
         split_size: Sequence[float] = (0.75, 0.15, 0.1),
@@ -58,6 +59,7 @@ class CustomDataModule(LightningDataModule):
             batch_size (int, optional): Batch size for data loading. Default: 1
             time_steps (int, optional): Number of time steps to include in each input sequence. Default: 1
             overlap (bool, optional): Whether overlapping windows should be used when generating sequences. Default: True
+            n_future (int, optional): Number of future time steps being predicted. Default: 1
             scaler (Callable, optional): Scaling function to apply to the data. Default: StandardScaler()
             data_limit (float, optional): Limit for the size of the dataset as a fraction (0 -> 1.0).
                                           If None, use the full dataset. Default: None
@@ -73,6 +75,7 @@ class CustomDataModule(LightningDataModule):
         self.labels = self._check_features(labels)
         self.time_steps = time_steps
         self.overlap = overlap
+        self.n_future = n_future
         self.scaler = scaler
         self.encoder = defaultdict(lambda: scaler)
         self.data_limit = self._check_limit(data_limit)
@@ -204,66 +207,68 @@ class CustomDataModule(LightningDataModule):
         ]
         print("\n".join(output))
 
-    def prepare_data(self):
-        # Selecte and create a copy of dataframe
-        data = self.dataframe.copy()
-
-        # Fill missing hours
-        data = self._fill_hours(data)
-
-        # Limit data
-        if self.data_limit:
-            data = self._limit_data(data)
-
-        # Create inputs and labels
-        inputs = data[self.features].copy()
-        labels = data[self.labels].copy()
-
-        # Cyclical Features Encoding
-        if "hour" in inputs.columns:
-            _angle = 2 * np.pi * data["hour"] / 24
-            inputs["hour_sin"] = np.sin(_angle)
-            inputs["hour_cos"] = np.cos(_angle)
-            inputs.drop(columns="hour", inplace=True)
-            self.features.remove("hour")
-
-        # Encode data
-        if self.scaler:
-            inputs[self.features] = self.encoder["input"].fit_transform(
-                inputs[self.features]
-            )
-            labels[self.labels] = self.encoder["label"].fit_transform(
-                labels[self.labels]
-            )
-
-        # Add Moving Average
-        inputs["rolling_mean"] = labels.rolling(window=6, min_periods=1).mean()
-
-        # Create time steps
-        inputs = np.lib.stride_tricks.sliding_window_view(
-            inputs.values, (self.time_steps, inputs.shape[1])
-        )[:-1].squeeze(axis=1)
-        labels = labels.values[self.time_steps :]
-
-        # Check overlap option
-        if not self.overlap:
-            inputs = inputs[:: self.time_steps]
-            labels = labels[:: self.time_steps]
-
-        # Create dataset
-        self.dataset = CustomDataset(inputs, labels)
-
-        # Train, val, test split
-        dataset_size = len(self.dataset)
-
-        train_end = int(dataset_size * self.split_size[0])
-        val_end = train_end + int(dataset_size * self.split_size[1])
-
-        self.train_set = Subset(self.dataset, range(0, train_end))
-        self.val_set = Subset(self.dataset, range(train_end, val_end))
-        self.test_set = Subset(self.dataset, range(val_end, dataset_size))
-
     def setup(self, stage: str):
+        if not hasattr(self, "dataset"):
+            # Selecte and create a copy of dataframe
+            data = self.dataframe.copy()
+
+            # Fill missing hours
+            data = self._fill_hours(data)
+
+            # Limit data
+            if self.data_limit:
+                data = self._limit_data(data)
+
+            # Create inputs and labels
+            inputs = data[self.features].copy()
+            labels = data[self.labels].copy()
+
+            # Cyclical Features Encoding
+            if "hour" in inputs.columns:
+                _angle = 2 * np.pi * data["hour"] / 24
+                inputs["hour_sin"] = np.sin(_angle)
+                inputs["hour_cos"] = np.cos(_angle)
+                inputs.drop(columns="hour", inplace=True)
+                self.features.remove("hour")
+
+            # Encode data
+            if self.scaler:
+                inputs[self.features] = self.encoder["input"].fit_transform(
+                    inputs[self.features]
+                )
+                labels[self.labels] = self.encoder["label"].fit_transform(
+                    labels[self.labels]
+                )
+
+            # Add Moving Average
+            inputs["rolling_mean"] = labels.rolling(window=6, min_periods=1).mean()
+
+            # Create time steps
+            inputs = sliding_window_view(inputs.values, self.time_steps, 0)[
+                : -self.n_future
+            ].transpose(0, 2, 1)
+            labels = sliding_window_view(labels.values, self.n_future, 0)[
+                self.time_steps :
+            ].squeeze(1)
+
+            # Check overlap option
+            if not self.overlap:
+                inputs = inputs[:: self.time_steps]
+                labels = labels[:: self.time_steps]
+
+            # Create dataset
+            self.dataset = CustomDataset(inputs, labels)
+
+            # Train, val, test split
+            dataset_size = len(self.dataset)
+
+            train_end = int(dataset_size * self.split_size[0])
+            val_end = train_end + int(dataset_size * self.split_size[1])
+
+            self.val_set = Subset(self.dataset, range(train_end, val_end))
+            self.test_set = Subset(self.dataset, range(val_end, dataset_size))
+            self.train_set = Subset(self.dataset, range(0, train_end))
+
         if stage == "fit":
             self._summary()
 

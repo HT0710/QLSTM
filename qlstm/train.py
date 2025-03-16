@@ -40,7 +40,7 @@ def main(cfg: DictConfig) -> None:
 
     # Define model
     model = LSTM(
-        input_size=7,
+        input_size=9,
         hidden_size=128,
         # n_qubits=2,
     )
@@ -62,6 +62,7 @@ def main(cfg: DictConfig) -> None:
     # Lightning model
     lit_model = LitModel(
         model=model,
+        output_size=cfg["data"]["n_future"],
         criterion=loss,
         optimizer=[optimizer],
         scheduler=[scheduler],
