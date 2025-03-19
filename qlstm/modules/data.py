@@ -70,6 +70,7 @@ class CustomDataModule(LightningDataModule):
         """
         super().__init__()
         self.data_path = Path(data_path)
+        self.processed_path = self._check_data(self.data_path)
         self.dataframe = self._load_data(self.data_path)
         self.features = self._check_features(features)
         self.labels = self._check_features(labels)
@@ -89,23 +90,30 @@ class CustomDataModule(LightningDataModule):
         }
 
     @staticmethod
-    def _load_data(path: Path) -> pd.DataFrame:
+    def _check_data(path: Path) -> Path:
+        if len(path.suffixes) > 1 and path.suffixes[-2] == ".x":
+            return path
+
+        return path.parent / f"{path.stem}.x{path.suffix}"
+
+    @staticmethod
+    def _load_data(path: Path, **kargs) -> pd.DataFrame:
         "Load data into pandas Dataframe."
         if not path.exists():
             raise FileNotFoundError(f"Data path not found: {path}")
 
         match path.suffix:
             case ".csv":
-                data = pd.read_csv(path, na_filter=True, skip_blank_lines=True)
+                df = pd.read_csv(path, na_filter=True, skip_blank_lines=True, **kargs)
             case ".xlsx":
-                data = pd.read_excel(path, na_filter=True, skip_blank_lines=True)
+                df = pd.read_excel(path, na_filter=True, skip_blank_lines=True, **kargs)
             case _:
                 raise ValueError("Only csv or xlsx file are supported.")
 
         # Correct header
-        data.columns = data.columns.str.strip().str.lower()
+        df.columns = df.columns.str.strip().str.lower()
 
-        return data.drop_duplicates()
+        return df
 
     def _check_features(self, indices: List[int | str]) -> List[str]:
         "Check input value for features and labels indices."
@@ -148,31 +156,38 @@ class CustomDataModule(LightningDataModule):
     @staticmethod
     def _fill_hours(df: pd.DataFrame):
         filled_rows = []
-        prev_hour = 0
+        prev_date = None
+        prev_hour = -1
 
-        def add_rows(start, end):
-            filled_rows.extend(
-                [
-                    {col: (h if col == "hour" else 0) for col in df.columns}
-                    for h in range(start, end)
-                ]
-            )
+        def add_rows(date, start, end):
+            new_rows = []
+            for h in range(start, end):
+                row = {}
+                for col in df.columns:
+                    if col == "datetime":
+                        row[col] = date + pd.DateOffset(hours=h)
+                    else:
+                        row[col] = 0
+                new_rows.append(row)
+            filled_rows.extend(new_rows)
 
         for _, row in df.iterrows():
-            current_hour = int(row["hour"])
+            curr_date = row["datetime"].date()
+            curr_hour = row["datetime"].hour
 
             # If current hour < previous hour, a new day started
-            if current_hour < prev_hour:
-                add_rows(prev_hour + 1, 24)
-                add_rows(0, current_hour)
+            if curr_hour < prev_hour:
+                add_rows(prev_date, prev_hour + 1, 24)
+                add_rows(curr_date, 0, curr_hour)
             else:
-                add_rows(prev_hour + 1, current_hour)
+                add_rows(curr_date, prev_hour + 1, curr_hour)
 
             # Append the current row
             filled_rows.append(row.to_dict())
 
             # Update previous hour
-            prev_hour = current_hour
+            prev_hour = curr_hour
+            prev_date = curr_date
 
         return pd.DataFrame(filled_rows)
 
@@ -207,13 +222,51 @@ class CustomDataModule(LightningDataModule):
         ]
         print("\n".join(output))
 
+    def prepare_data(self):
+        if self.processed_path.exists():
+            self.features.remove("hour")
+            self.features.extend(["hour_sin", "hour_cos", "rolling_mean"])
+            return
+
+        # Create a copy of dataframe
+        data = self.dataframe.copy()
+
+        # Convert 'date' and 'hour' columns to datetime type
+        data["date"] = pd.to_datetime(data["date"])
+        data["hour"] = pd.to_timedelta(data["hour"], unit="h")
+        data["date"] = data["date"] + data["hour"]
+        data = data.rename(columns={"date": "datetime"})
+        self.features.remove("hour")
+
+        # Sort by date
+        data = data.sort_values(by="datetime")
+
+        # Fill missing hours
+        data = self._fill_hours(data)
+
+        # Cyclical Features Encoding
+        _angle = 2 * np.pi * data["datetime"].dt.hour / 24
+        data["hour_sin"] = np.sin(_angle)
+        data["hour_cos"] = np.cos(_angle)
+
+        data["rolling_mean"] = data[self.labels].rolling(window=6, min_periods=1).mean()
+
+        # Drop unnecessary columns
+        x_columns = set(
+            self.features + self.labels + ["hour_sin", "hour_cos", "rolling_mean"]
+        )
+        data = data.loc[:, data.columns.isin(x_columns)]
+
+        # Finalize
+        data = data.dropna().round(4)
+
+        # Save new data
+        data.to_csv(str(self.processed_path), index=False)
+
     def setup(self, stage: str):
         if not hasattr(self, "dataset"):
-            # Selecte and create a copy of dataframe
-            data = self.dataframe.copy()
-
-            # Fill missing hours
-            data = self._fill_hours(data)
+            # Load processed data
+            data = self._load_data(self.processed_path)
 
             # Limit data
             if self.data_limit:
@@ -223,25 +276,15 @@ class CustomDataModule(LightningDataModule):
             inputs = data[self.features].copy()
             labels = data[self.labels].copy()
 
-            # Cyclical Features Encoding
-            if "hour" in inputs.columns:
-                _angle = 2 * np.pi * data["hour"] / 24
-                inputs["hour_sin"] = np.sin(_angle)
-                inputs["hour_cos"] = np.cos(_angle)
-                inputs.drop(columns="hour", inplace=True)
-                self.features.remove("hour")
-
             # Encode data
             if self.scaler:
-                inputs[self.features] = self.encoder["input"].fit_transform(
-                    inputs[self.features]
-                )
+                scalable = [
+                    x for x in self.features if x not in ["hour_sin", "hour_cos"]
+                ]
+                inputs[scalable] = self.encoder["input"].fit_transform(inputs[scalable])
                 labels[self.labels] = self.encoder["label"].fit_transform(
                     labels[self.labels]
                 )
-
-            # Add Moving Average
-            inputs["rolling_mean"] = labels.rolling(window=6, min_periods=1).mean()
 
             # Create time steps
             inputs = sliding_window_view(inputs.values, self.time_steps, 0)[
