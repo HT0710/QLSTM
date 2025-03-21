@@ -2,7 +2,6 @@ from pathlib import Path
 
 import gradio as gr
 import pandas as pd
-from scipy.stats import kurtosis
 
 
 class DatasetsTab:
@@ -10,78 +9,66 @@ class DatasetsTab:
         self.parent = parent
         self.root = Path("./qlstm")
         self.data_path = self.root / "data"
-        self.datasets = self.data_path.glob("*.csv")
+        self.datasets = [
+            i for i in self.data_path.glob("*.csv") if not i.match("*.x.csv")
+        ]
+        self.loaded = None
 
-    def _load_data(self, data_name):
-        return pd.read_csv(str(self.data_path / data_name), index_col=0)
+    def _change_data(self, data_name):
+        data = pd.read_csv(str(self.data_path / data_name))
+        data = data.loc[:, ~data.columns.str.contains("^Unnamed")]
+        self.loaded = data
 
-    def _change_mode(self, mode):
-        if mode == "Review":
-            return gr.update(visible=True), gr.update(visible=False)
-        if mode == "EDA":
-            return gr.update(visible=False), gr.update(visible=True)
+        return gr.Tabs(selected=0), data
 
-    def _eda(self, mode, data_name):
-        if mode == "Summary Statistics":
-            df = self._load_data(data_name)
-            df["date"] = pd.to_datetime(df["date"])
-            df["hour"] = pd.to_timedelta(df["hour"], unit="h")
-            df["date"] = df["date"] + df["hour"]
-            df = df.rename(columns={"date": "datetime"})
-            df.drop(["year", "hour"], axis=1, inplace=True)
+    def _count(self):
+        return len(self.loaded), len(self.loaded.columns)
 
-            df.index = df["datetime"]
+    def _eda(self):
+        df = self.loaded.copy()
+        df["date"] = pd.to_datetime(df["date"])
+        df["hour"] = pd.to_timedelta(df["hour"], unit="h")
+        df["date"] = df["date"] + df["hour"]
+        df = df.rename(columns={"date": "datetime"})
+        df.drop(["year", "hour", "month", "day"], axis=1, inplace=True)
 
-            # Select numerical columns only
-            num_cols = df.select_dtypes(include=["number"]).columns
-            if len(num_cols) == 0:
-                return "No numerical columns found in the dataset."
+        df.index = df["datetime"]
 
-            df = df[num_cols]  # Keep only numerical columns
+        # Select numerical columns only
+        num_cols = df.select_dtypes(include=["number"]).columns
+        if len(num_cols) == 0:
+            return "No numerical columns found in the dataset."
 
-            summary = df.describe().T
-            summary["skewness"] = df.skew()
-            summary["kurtosis"] = df.apply(kurtosis)
+        df = df[num_cols]  # Keep only numerical columns
 
-            return gr.update(visible=True), summary.round(4)
-        else:
-            return gr.update(visible=False), None
+        summary = df.describe().T.reset_index()
+        summary = summary.rename(columns={"index": "Statistic"})
+
+        # summary["skewness"] = df.skew()
+        # summary["kurtosis"] = df.apply(kurtosis)
+
+        return summary.round(4)
 
     def __call__(self):
-        with gr.Tabs(selected=1):
-            with gr.Tab("Overview", id=0):
-                gr.Markdown("# Comming Soon")
+        data_dropdown = gr.Dropdown(
+            choices=map(str, self.datasets),
+            label="Dataset",
+            interactive=True,
+        )
 
-            with gr.Tab("Detail", id=1):
-                with gr.Row():
-                    data_dropdown = gr.Dropdown(
-                        choices=[str(x.name) for x in self.datasets],
-                        label="Dataset",
-                        interactive=True,
-                    )
-                    display_dropdown = gr.Dropdown(
-                        choices=["Review", "EDA"],
-                        label="Display",
-                        interactive=True,
-                    )
-                    eda_dropdown = gr.Dropdown(
-                        choices=["All", "Summary Statistics"],
-                        label="Filter",
-                        visible=False,
-                        interactive=True,
-                    )
-
+        with gr.Tabs() as tabs:
+            with gr.Tab("Review", id=0):
                 df = gr.Dataframe(max_height=800)
 
-                data_dropdown.change(self._load_data, [data_dropdown], df, queue=False)
-                display_dropdown.change(
-                    self._change_mode,
-                    [display_dropdown],
-                    [df, eda_dropdown],
-                    queue=False,
-                )
-                eda_dropdown.change(
-                    self._eda, [eda_dropdown, data_dropdown], [df, df], queue=False
-                )
+                data_dropdown.change(self._change_data, data_dropdown, [tabs, df])
+                self.parent.load(self._change_data, data_dropdown, [tabs, df])
 
-        self.parent.load(self._load_data, [data_dropdown], df, queue=False)
+            with gr.Tab("Overview", id=1) as t1:
+                with gr.Row():
+                    n_rows = gr.Label(label="Number of data points")
+                    n_colums = gr.Label(label="Number of features")
+
+                df = gr.Dataframe()
+
+                t1.select(self._count, None, [n_rows, n_colums])
+                t1.select(self._eda, None, df)
