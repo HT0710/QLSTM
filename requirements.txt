@@ -1,4 +1,4 @@
-# madatories
+# mandatories
 numpy
 pandas
 scikit-learn
@@ -8,6 +8,8 @@ pennylane
 
 # others
 rich
+seaborn
+matplotlib
 hydra-core
 rootutils
 psutil
