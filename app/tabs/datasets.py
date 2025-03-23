@@ -47,20 +47,18 @@ class DatasetsTab:
         summary = df.describe().T.reset_index()
         summary = summary.rename(columns={"index": "Statistic"})
 
-        # summary["skewness"] = df.skew()
-        # summary["kurtosis"] = df.apply(kurtosis)
-
         return summary.round(4)
 
     def _heatmap(self):
         df = self.current["summary"][["Statistic", "mean", "std", "min", "max"]]
         df = df.set_index("Statistic")
 
-        fig, ax = plt.subplots(figsize=(12, 8), dpi=300)
+        fig, ax = plt.subplots(figsize=(12, 6), dpi=200)
         sns.heatmap(df, annot=True, fmt=".2f", cmap="coolwarm", ax=ax, linewidths=0.5)
 
-        fig.subplots_adjust(left=0.2, right=1, top=1, bottom=0.1)
+        fig.subplots_adjust(left=0.2, right=1, top=0.85, bottom=0.15)
 
+        ax.set_title("Descriptive Statistics", fontsize=16, fontweight="bold", pad=14)
         ax.set_xlabel("Statistic", fontsize=14, fontweight="bold", labelpad=14)
         ax.set_ylabel("Feature", fontsize=14, fontweight="bold", labelpad=14)
 
@@ -73,13 +71,14 @@ class DatasetsTab:
             id_vars=["Statistic"], var_name="Percentile", value_name="Value"
         )
 
-        fig, ax = plt.subplots(figsize=(12, 8), dpi=300)
+        fig, ax = plt.subplots(figsize=(12, 6), dpi=200)
         sns.boxplot(
             df_melted, x="Statistic", y="Value", ax=ax, hue="Statistic", palette="Set2"
         )
 
-        fig.subplots_adjust(top=1, bottom=0.1)
+        fig.subplots_adjust(top=0.85, bottom=0.15)
 
+        ax.set_title("Distribution Percentiles", fontsize=16, fontweight="bold", pad=14)
         ax.set_xlabel("Feature", fontsize=14, fontweight="bold", labelpad=14)
         ax.set_ylabel("Value", fontsize=14, fontweight="bold", labelpad=14)
 
@@ -88,14 +87,15 @@ class DatasetsTab:
     def _barplot(self):
         df = self.current["summary"][["Statistic", "mean"]]
 
-        fig, ax = plt.subplots(figsize=(12, 8), dpi=300)
+        fig, ax = plt.subplots(figsize=(12, 6), dpi=200)
 
         sns.barplot(
             df, x="Statistic", y="mean", ax=ax, hue="Statistic", palette="viridis"
         )
 
-        fig.subplots_adjust(top=1, bottom=0.1)
+        fig.subplots_adjust(top=0.85, bottom=0.15)
 
+        ax.set_title("Mean Value", fontsize=16, fontweight="bold", pad=14)
         ax.set_xlabel("Feature", fontsize=14, fontweight="bold", labelpad=14)
         ax.set_ylabel("Value", fontsize=14, fontweight="bold", labelpad=14)
 
@@ -122,13 +122,23 @@ class DatasetsTab:
                 gr.Markdown("## Feature Statistics")
                 df = gr.Dataframe()
 
+                gr.Markdown("---")
                 gr.Markdown("## Descriptive Statistics")
+                gr.Markdown(
+                    "A visual representation of core statistical measures, offering insights into data distribution, variability, and overall trends. "
+                )
                 plt_heatmap = gr.Plot()
 
+                gr.Markdown("---")
                 gr.Markdown("## Distribution Percentiles")
+                gr.Markdown(
+                    "Illustrate the spread and distribution of each feature, highlighting key percentiles, quartile ranges, and potential outliers."
+                )
                 plt_box = gr.Plot()
 
+                gr.Markdown("---")
                 gr.Markdown("## Mean Value")
+                gr.Markdown("A comparison of the average values of different features.")
                 plt_bar = gr.Plot()
 
                 t1.select(self._count, None, [n_rows, n_colums])
