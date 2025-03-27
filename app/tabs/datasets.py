@@ -1,7 +1,11 @@
+from calendar import monthrange
+from functools import partial
 from pathlib import Path
+from datetime import datetime
 
 import gradio as gr
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 
@@ -14,40 +18,159 @@ class DatasetsTab:
         self.datasets = sorted(
             [i.name for i in self.data_path.glob("*.csv") if not i.match("*.x.csv")]
         )
-        self.current = {}
+        self.current = {
+            "data": None,
+            "processed": None,
+            "ma_size": 1,
+            "group": "None",
+            "from": None,
+            "to": None,
+        }
+
+    def _show_data(self, df):
+        if self.current["ma_size"] > 1:
+            df = df.rolling(window=self.current["ma_size"], min_periods=1).mean()
+
+        if self.current["group"] != "None":
+            df = df.resample(self.current["group"]).mean()
+
+            match self.current["group"]:
+                case "D" | "W":
+                    df.index = df.index.to_period("D")
+                case "ME":
+                    df.index = df.index.to_period("M")
+                case "YE":
+                    df.index = df.index.to_period("Y")
+
+        df = df.loc[self.current["from"] : self.current["to"]]
+
+        return gr.update(
+            value=df.round(2).reset_index(), label=f"Number of Rows: {len(df)}"
+        )
 
     def _change_data(self, data_name):
         df = pd.read_csv(str(self.data_path / data_name))
+
+        # Drop unnamed columns
         df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
 
-        self.current["data"] = df
-        self.current["summary"] = self._summary(df)
-
-        return gr.Tabs(selected=0), self.current["data"]
-
-    def _count(self):
-        return len(self.current["data"]), len(self.current["data"].columns)
-
-    def _summary(self, df: pd.DataFrame) -> pd.DataFrame:
+        # Format datetime
         df["date"] = pd.to_datetime(df["date"])
         df["hour"] = pd.to_timedelta(df["hour"], unit="h")
         df["date"] = df["date"] + df["hour"]
-        df = df.rename(columns={"date": "datetime"})
+        df = df.rename(columns={"date": "Datetime"})
         df.drop(["year", "hour", "month", "day"], axis=1, inplace=True)
 
-        df = df.set_index("datetime")
+        # Sort and set "Datetime" as index
+        df = df.sort_values(by="Datetime")
+        df = df.set_index("Datetime")
 
         # Select numerical columns only
         num_cols = df.select_dtypes(include=["number"]).columns
-        if len(num_cols) == 0:
-            return None
+        df = df[num_cols] if len(num_cols) != 0 else None
 
-        df = df[num_cols]
+        self.current["group"] = "None"
+        self.current["processed"] = self.current["data"] = df
+        self.current["summary"] = self._summary(df)
 
+        date_min = self.current["from"] = self.current["data"].index.min()
+        date_max = self.current["to"] = self.current["data"].index.max()
+
+        year_range = range(date_min.year, date_max.year + 1)
+
+        min_month_range = range(date_min.month, 13)
+        max_month_range = range(1, date_max.month + 1)
+
+        _, min_num_days = monthrange(date_min.year, date_min.month)
+        min_day_range = range(date_min.day, min_num_days + 1)
+
+        max_day_range = range(1, date_max.day + 1)
+
+        return (
+            self._show_data(self.current["data"]),
+            gr.update(choices=year_range, value=date_min.year),
+            gr.update(choices=min_month_range, value=date_min.month),
+            gr.update(choices=min_day_range, value=date_min.day),
+            gr.update(choices=year_range, value=date_max.year),
+            gr.update(choices=max_month_range, value=date_max.month),
+            gr.update(choices=max_day_range, value=date_max.day),
+        )
+
+    def _fill_missing_hours(self, state):
+        def fill_hours(df: pd.DataFrame, start, end):
+            filled_rows = []
+            prev_date = None
+            prev_hour = start - 1
+
+            def add_rows(date, start, end):
+                new_rows = []
+                for h in range(start, end):
+                    row = {}
+                    for col in df.columns:
+                        if col == "Datetime":
+                            row[col] = date + pd.DateOffset(hours=h)
+                        else:
+                            row[col] = np.nan
+                    new_rows.append(row)
+                filled_rows.extend(new_rows)
+
+            for _, row in df.iterrows():
+                curr_date = row["Datetime"].date()
+                curr_hour = row["Datetime"].hour
+
+                if curr_hour < prev_hour:
+                    add_rows(prev_date, prev_hour + 1, end + 1)
+                    add_rows(curr_date, start, curr_hour)
+                else:
+                    add_rows(curr_date, prev_hour + 1, curr_hour)
+
+                # Append the current row
+                filled_rows.append(row.to_dict())
+
+                # Update previous hour
+                prev_hour = curr_hour
+                prev_date = curr_date
+
+            return pd.DataFrame(filled_rows)
+
+        if state == "On":
+            df = fill_hours(self.current["data"].reset_index(), 6, 18)
+
+            df.interpolate(method="linear", inplace=True)
+
+            self.current["processed"] = df.set_index("Datetime")
+
+        else:
+            self.current["processed"] = self.current["data"]
+
+        return self._show_data(self.current["processed"])
+
+    def _moving_average(self, size: int):
+        self.current["ma_size"] = size
+
+        return self._show_data(self.current["processed"])
+
+    def _change_group(self, group):
+        self.current["group"] = group
+
+        return self._show_data(self.current["processed"])
+
+    def _change_time(self, y, m, d, indicator):
+        _, new_num_days = monthrange(y, m)
+        d = min(d, new_num_days)
+
+        self.current[indicator] = datetime(y, m, d)
+
+        return (
+            gr.update(choices=range(1, new_num_days + 1), value=d),
+            self._show_data(self.current["processed"]),
+        )
+
+    def _summary(self, df: pd.DataFrame) -> pd.DataFrame:
         summary = df.describe().T.reset_index()
         summary = summary.rename(columns={"index": "Statistic"})
 
-        return summary.round(4)
+        return summary
 
     def _heatmap(self):
         df = self.current["summary"][["Statistic", "mean", "std", "min", "max"]]
@@ -102,24 +225,123 @@ class DatasetsTab:
         return fig
 
     def __call__(self):
-        data_dropdown = gr.Dropdown(
-            choices=map(str, self.datasets), label="Dataset", interactive=True
-        )
+        with gr.Row(equal_height=True):
+            with gr.Column():
+                data_dropdown = gr.Dropdown(
+                    choices=map(str, self.datasets), label="Dataset", interactive=True
+                )
+            with gr.Column():
+                with gr.Row(equal_height=True):
+                    fmh_radio = gr.Radio(
+                        ["On", "Off"], value="Off", label="Fill missing hours"
+                    )
+                    ma_slider = gr.Slider(
+                        minimum=1, maximum=24, label="Moving Average", step=1
+                    )
 
         with gr.Tabs() as tabs:
             with gr.Tab("Review", id=0):
-                df = gr.Dataframe(max_height=800)
-
-                data_dropdown.change(self._change_data, data_dropdown, [tabs, df])
-                self.parent.load(self._change_data, data_dropdown, [tabs, df])
-
-            with gr.Tab("Overview", id=1) as t1:
-                gr.Markdown("## Dataset Overview")
                 with gr.Row():
-                    n_rows = gr.Label(label="Number of data points")
-                    n_colums = gr.Label(label="Number of features")
+                    with gr.Column(scale=2):
+                        gr.Markdown("### Settings")
+                        with gr.Row(equal_height=True):
+                            index_radio = gr.Radio(
+                                ["On", "Off"], value="On", label="Show index"
+                            )
+                            group_dropdown = gr.Dropdown(
+                                [
+                                    ("None", "None"),
+                                    ("Day", "D"),
+                                    ("Week", "W"),
+                                    ("Month", "ME"),
+                                    ("Year", "YE"),
+                                ],
+                                label="Group by",
+                                interactive=True,
+                                scale=3,
+                            )
 
-                gr.Markdown("## Feature Statistics")
+                    with gr.Column(scale=1):
+                        gr.Markdown("### From")
+                        with gr.Row():
+                            fday = gr.Dropdown(
+                                label="Day", min_width=50, interactive=True
+                            )
+                            fmonth = gr.Dropdown(
+                                label="Month", min_width=50, interactive=True
+                            )
+                            fyear = gr.Dropdown(
+                                label="Year", min_width=50, interactive=True
+                            )
+
+                    with gr.Column(scale=1):
+                        gr.Markdown("### To")
+                        with gr.Row():
+                            tday = gr.Dropdown(
+                                label="Day", min_width=50, interactive=True
+                            )
+                            tmonth = gr.Dropdown(
+                                label="Month", min_width=50, interactive=True
+                            )
+                            tyear = gr.Dropdown(
+                                label="Year", min_width=50, interactive=True
+                            )
+
+                df = gr.Dataframe(
+                    max_height=600,
+                    show_row_numbers=True,
+                    show_fullscreen_button=True,
+                    show_search="search",
+                )
+
+                index_radio.select(
+                    lambda x: gr.update(show_row_numbers=x == "On"), index_radio, df
+                )
+
+                for field in [fday, fmonth, fyear]:
+                    field.select(
+                        fn=partial(self._change_time, indicator="from"),
+                        inputs=[fyear, fmonth, fday],
+                        outputs=[fday, df],
+                        scroll_to_output=True,
+                    )
+
+                for field in [tday, tmonth, tyear]:
+                    field.select(
+                        fn=partial(self._change_time, indicator="to"),
+                        inputs=[tyear, tmonth, tday],
+                        outputs=[tday, df],
+                        scroll_to_output=True,
+                    )
+
+                group_dropdown.select(
+                    self._change_group, group_dropdown, df, scroll_to_output=True
+                )
+                fmh_radio.select(
+                    self._fill_missing_hours, fmh_radio, df, scroll_to_output=True
+                )
+                ma_slider.release(
+                    self._moving_average, ma_slider, df, scroll_to_output=True
+                )
+                data_dropdown.select(
+                    lambda: gr.update(selected=0), None, tabs, scroll_to_output=True
+                )
+                data_dropdown.change(
+                    self._change_data,
+                    data_dropdown,
+                    [df, fyear, fmonth, fday, tyear, tmonth, tday],
+                )
+                self.parent.load(
+                    self._change_data,
+                    data_dropdown,
+                    [df, fyear, fmonth, fday, tyear, tmonth, tday],
+                )
+
+            with gr.Tab("Plot", id=1):
+                gr.Plot()
+
+            with gr.Tab("Statistic", id=2) as stat_tab:
+                gr.Markdown("## Review Table")
                 df = gr.Dataframe()
 
                 gr.Markdown("---")
@@ -141,8 +363,9 @@ class DatasetsTab:
                 gr.Markdown("A comparison of the average values of different features.")
                 plt_bar = gr.Plot()
 
-                t1.select(self._count, None, [n_rows, n_colums])
-                t1.select(lambda: self.current["summary"], None, df)
-                t1.select(self._heatmap, None, plt_heatmap)
-                t1.select(self._boxplot, None, plt_box)
-                t1.select(self._barplot, None, plt_bar)
+                stat_tab.select(lambda: self.current["summary"], None, df)
+                stat_tab.select(self._heatmap, None, plt_heatmap)
+                stat_tab.select(self._boxplot, None, plt_box)
+                stat_tab.select(self._barplot, None, plt_bar)
+
+        tabs.change(lambda: plt.close())
