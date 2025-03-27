@@ -31,7 +31,7 @@ class DemoTab:
         self.models = {
             "LSTM": {
                 "init": LSTM(9, 128),
-                "checkpoint": "lightning_logs/LSTM/version_0/checkpoints/epoch=2-step=3582.ckpt",
+                "checkpoint": "lightning_logs/LSTM/base/checkpoints/last.ckpt",
             },
             # "LSTMf": {"init": LSTMf(8, 128), "checkpoint": None},
             "cLSTM": {
@@ -70,10 +70,6 @@ class DemoTab:
         _range = range(years.min(), years.max() + 1)
         return [gr.Dropdown(choices=_range, value=int(years.min()))] * 2
 
-    def _update_days(self, year, month, day):
-        _, num_days = monthrange(year, month)
-        return gr.Dropdown(choices=range(1, num_days + 1), value=min(day, num_days))
-
     def _predict(self, model_name, data_name):
         # Define dataset
         if data_name not in self.datasets:
@@ -85,6 +81,7 @@ class DemoTab:
                 overlap=True,
             )
             self.datasets[data_name].prepare_data()
+            self.datasets[data_name].setup("predict")
         data = self.datasets[data_name]
 
         # Define lightning model
@@ -96,7 +93,10 @@ class DemoTab:
 
         # Inference loop
         with torch.inference_mode():
+            # Close old figures and create a new one
+            plt.close()
             plt.figure(figsize=(24, 7))
+
             if self.steps == 0:
                 return plt
 
@@ -153,8 +153,8 @@ class DemoTab:
                         interactive=True,
                     )
 
-                    fmonth.change(self._update_days, [fyear, fmonth, fday], fday)
-                    fyear.change(self._update_days, [fyear, fmonth, fday], fday)
+                    fmonth.select(self._update_days, [fyear, fmonth, fday], fday)
+                    fyear.select(self._update_days, [fyear, fmonth, fday], fday)
 
                 gr.Markdown("### To")
                 with gr.Row():
@@ -176,14 +176,14 @@ class DemoTab:
                         interactive=True,
                     )
 
-                    tmonth.change(self._update_days, [tyear, tmonth, tday], tday)
-                    tyear.change(self._update_days, [tyear, tmonth, tday], tday)
+                    tmonth.select(self._update_days, [tyear, tmonth, tday], tday)
+                    tyear.select(self._update_days, [tyear, tmonth, tday], tday)
 
         gr.Markdown("### Result")
         with gr.Row():
             plot = gr.Plot(show_label=False)
 
-        data_dropdown.change(self._update_years, [data_dropdown], [fyear, tyear])
+        data_dropdown.select(self._update_years, [data_dropdown], [fyear, tyear])
         self.parent.load(self._update_years, [data_dropdown], [fyear, tyear])
 
         button.click(self._calculate_hours, [fyear, fmonth, fday, tyear, tmonth, tday])
