@@ -96,6 +96,22 @@ class DatasetsTab:
             gr.update(choices=max_day_range, value=date_max.day),
         )
 
+    def _change_group(self, group):
+        self.current["group"] = group
+
+        return self._show_data(self.current["processed"])
+
+    def _change_time(self, y, m, d, indicator):
+        _, new_num_days = monthrange(y, m)
+        d = min(d, new_num_days)
+
+        self.current[indicator] = datetime(y, m, d)
+
+        return (
+            gr.update(choices=range(1, new_num_days + 1), value=d),
+            self._show_data(self.current["processed"]),
+        )
+
     def _fill_missing_hours(self, state):
         def fill_hours(df: pd.DataFrame, start, end):
             filled_rows = []
@@ -150,22 +166,6 @@ class DatasetsTab:
 
         return self._show_data(self.current["processed"])
 
-    def _change_group(self, group):
-        self.current["group"] = group
-
-        return self._show_data(self.current["processed"])
-
-    def _change_time(self, y, m, d, indicator):
-        _, new_num_days = monthrange(y, m)
-        d = min(d, new_num_days)
-
-        self.current[indicator] = datetime(y, m, d)
-
-        return (
-            gr.update(choices=range(1, new_num_days + 1), value=d),
-            self._show_data(self.current["processed"]),
-        )
-
     def _summary(self, df: pd.DataFrame) -> pd.DataFrame:
         summary = df.describe().T.reset_index()
         summary = summary.rename(columns={"index": "Statistic"})
@@ -216,11 +216,47 @@ class DatasetsTab:
             df, x="Statistic", y="mean", ax=ax, hue="Statistic", palette="viridis"
         )
 
-        fig.subplots_adjust(top=0.85, bottom=0.15)
+        fig.subplots_adjust(top=0.95, bottom=0.15)
 
         ax.set_title("Mean Value", fontsize=16, fontweight="bold", pad=14)
         ax.set_xlabel("Feature", fontsize=14, fontweight="bold", labelpad=14)
         ax.set_ylabel("Value", fontsize=14, fontweight="bold", labelpad=14)
+
+        return fig
+
+    def _select_vis(self, df, mode):
+        plot = x_axis = y_axis = None
+
+        if mode == "On":
+            x_axis = gr.update(choices=["Datetime"], value="Datetime")
+            y_axis = gr.update(
+                choices=[c for c in df.columns if c != "Datetime"],
+                value=[df.columns[-1]],
+            )
+
+            plot = self._vis_plot(df, mode, x_axis["value"], y_axis["value"])
+
+        return (
+            gr.update(visible=mode == "Off"),
+            gr.update(visible=mode == "On"),
+            plot,
+            x_axis,
+            y_axis,
+        )
+
+    def _vis_plot(self, df, mode, x, y):
+        fig = None
+
+        if mode == "On" and x and y:
+            fig, ax = plt.subplots(figsize=(10, 6), dpi=200)
+
+            for feature in y:
+                sns.lineplot(x=pd.to_datetime(df[x]), y=df[feature], ax=ax)
+
+            fig.subplots_adjust(top=0.95, bottom=0.15)
+
+            ax.set_xlabel(x, fontsize=14, fontweight="bold", labelpad=14)
+            ax.set_ylabel("Values", fontsize=14, fontweight="bold", labelpad=14)
 
         return fig
 
@@ -245,6 +281,12 @@ class DatasetsTab:
                     with gr.Column(scale=2):
                         gr.Markdown("### Options")
                         with gr.Row(equal_height=True):
+                            vis_radio = gr.Radio(
+                                ["On", "Off"],
+                                value="Off",
+                                label="Visualize Mode",
+                                interactive=True,
+                            )
                             index_radio = gr.Radio(
                                 ["On", "Off"], value="On", label="Show index"
                             )
@@ -258,10 +300,10 @@ class DatasetsTab:
                                 ],
                                 label="Group by",
                                 interactive=True,
-                                scale=3,
+                                scale=1,
                             )
 
-                    with gr.Column(scale=1):
+                    with gr.Column(scale=1, min_width=0):
                         gr.Markdown("### From")
                         with gr.Row():
                             fday = gr.Dropdown(
@@ -274,7 +316,7 @@ class DatasetsTab:
                                 label="Year", min_width=50, interactive=True
                             )
 
-                    with gr.Column(scale=1):
+                    with gr.Column(scale=1, min_width=0):
                         gr.Markdown("### To")
                         with gr.Row():
                             tday = gr.Dropdown(
@@ -292,6 +334,48 @@ class DatasetsTab:
                     show_row_numbers=True,
                     show_fullscreen_button=True,
                     show_search="search",
+                )
+
+                with gr.Row(visible=False) as vis:
+                    with gr.Column(scale=1, min_width=0):
+                        gr.Markdown("### Configuration")
+                        x_dropdown = gr.Dropdown(
+                            label="X-Axis (Horizontal)", interactive=True
+                        )
+                        y_dropdown = gr.Dropdown(
+                            label="Y-Axis (Vertical)",
+                            multiselect=True,
+                            interactive=True,
+                        )
+
+                    with gr.Column(scale=4):
+                        vis_plot = gr.Plot(show_label=False)
+
+                vis_radio.select(
+                    self._select_vis,
+                    [df, vis_radio],
+                    [df, vis, vis_plot, x_dropdown, y_dropdown],
+                    scroll_to_output=True,
+                )
+
+                x_dropdown.select(
+                    self._vis_plot,
+                    [df, vis_radio, x_dropdown, y_dropdown],
+                    vis_plot,
+                    scroll_to_output=True,
+                )
+                y_dropdown.select(
+                    self._vis_plot,
+                    [df, vis_radio, x_dropdown, y_dropdown],
+                    vis_plot,
+                    scroll_to_output=True,
+                )
+
+                df.change(
+                    self._vis_plot,
+                    [df, vis_radio, x_dropdown, y_dropdown],
+                    vis_plot,
+                    scroll_to_output=True,
                 )
 
                 index_radio.select(
@@ -337,69 +421,7 @@ class DatasetsTab:
                     [df, fyear, fmonth, fday, tyear, tmonth, tday],
                 )
 
-            with gr.Tab("Plot", id=1):
-                with gr.Row():
-                    with gr.Column(scale=2):
-                        gr.Markdown("### Options")
-                        group_dropdown = gr.Dropdown(
-                            [
-                                ("None", "None"),
-                                ("Day", "D"),
-                                ("Week", "W"),
-                                ("Month", "ME"),
-                                ("Year", "YE"),
-                            ],
-                            label="Group by",
-                            interactive=True,
-                        )
-
-                    with gr.Column(scale=1):
-                        gr.Markdown("### From")
-                        with gr.Row():
-                            fday = gr.Dropdown(
-                                label="Day", min_width=50, interactive=True
-                            )
-                            fmonth = gr.Dropdown(
-                                label="Month", min_width=50, interactive=True
-                            )
-                            fyear = gr.Dropdown(
-                                label="Year", min_width=50, interactive=True
-                            )
-
-                    with gr.Column(scale=1):
-                        gr.Markdown("### To")
-                        with gr.Row():
-                            tday = gr.Dropdown(
-                                label="Day", min_width=50, interactive=True
-                            )
-                            tmonth = gr.Dropdown(
-                                label="Month", min_width=50, interactive=True
-                            )
-                            tyear = gr.Dropdown(
-                                label="Year", min_width=50, interactive=True
-                            )
-
-                with gr.Row():
-                    with gr.Column(scale=1):
-                        gr.Markdown("### Configuration")
-                        gr.Dropdown(label="X-Axis (Horizontal)")
-                        gr.Dropdown(label="Y-Axis (Vertical)")
-
-                    with gr.Column(scale=4):
-                        gr.Plot(show_label=False)
-
-                data_dropdown.change(
-                    self._change_data,
-                    data_dropdown,
-                    [df, fyear, fmonth, fday, tyear, tmonth, tday],
-                )
-                self.parent.load(
-                    self._change_data,
-                    data_dropdown,
-                    [df, fyear, fmonth, fday, tyear, tmonth, tday],
-                )
-
-            with gr.Tab("Statistic", id=2) as stat_tab:
+            with gr.Tab("Statistic", id=1) as stat_tab:
                 gr.Markdown("## Review Table")
                 df = gr.Dataframe()
 
