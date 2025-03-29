@@ -243,7 +243,7 @@ class DatasetsTab:
             with gr.Tab("Review", id=0):
                 with gr.Row():
                     with gr.Column(scale=2):
-                        gr.Markdown("### Settings")
+                        gr.Markdown("### Options")
                         with gr.Row(equal_height=True):
                             index_radio = gr.Radio(
                                 ["On", "Off"], value="On", label="Show index"
@@ -338,7 +338,66 @@ class DatasetsTab:
                 )
 
             with gr.Tab("Plot", id=1):
-                gr.Plot()
+                with gr.Row():
+                    with gr.Column(scale=2):
+                        gr.Markdown("### Options")
+                        group_dropdown = gr.Dropdown(
+                            [
+                                ("None", "None"),
+                                ("Day", "D"),
+                                ("Week", "W"),
+                                ("Month", "ME"),
+                                ("Year", "YE"),
+                            ],
+                            label="Group by",
+                            interactive=True,
+                        )
+
+                    with gr.Column(scale=1):
+                        gr.Markdown("### From")
+                        with gr.Row():
+                            fday = gr.Dropdown(
+                                label="Day", min_width=50, interactive=True
+                            )
+                            fmonth = gr.Dropdown(
+                                label="Month", min_width=50, interactive=True
+                            )
+                            fyear = gr.Dropdown(
+                                label="Year", min_width=50, interactive=True
+                            )
+
+                    with gr.Column(scale=1):
+                        gr.Markdown("### To")
+                        with gr.Row():
+                            tday = gr.Dropdown(
+                                label="Day", min_width=50, interactive=True
+                            )
+                            tmonth = gr.Dropdown(
+                                label="Month", min_width=50, interactive=True
+                            )
+                            tyear = gr.Dropdown(
+                                label="Year", min_width=50, interactive=True
+                            )
+
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        gr.Markdown("### Configuration")
+                        gr.Dropdown(label="X-Axis (Horizontal)")
+                        gr.Dropdown(label="Y-Axis (Vertical)")
+
+                    with gr.Column(scale=4):
+                        gr.Plot(show_label=False)
+
+                data_dropdown.change(
+                    self._change_data,
+                    data_dropdown,
+                    [df, fyear, fmonth, fday, tyear, tmonth, tday],
+                )
+                self.parent.load(
+                    self._change_data,
+                    data_dropdown,
+                    [df, fyear, fmonth, fday, tyear, tmonth, tday],
+                )
 
             with gr.Tab("Statistic", id=2) as stat_tab:
                 gr.Markdown("## Review Table")
@@ -349,23 +408,23 @@ class DatasetsTab:
                 gr.Markdown(
                     "A visual representation of core statistical measures, offering insights into data distribution, variability, and overall trends. "
                 )
-                plt_heatmap = gr.Plot()
+                heatmap_plot = gr.Plot(show_label=False)
 
                 gr.Markdown("---")
                 gr.Markdown("## Distribution Percentiles")
                 gr.Markdown(
                     "Illustrate the spread and distribution of each feature, highlighting key percentiles, quartile ranges, and potential outliers."
                 )
-                plt_box = gr.Plot()
+                box_plot = gr.Plot(show_label=False)
 
                 gr.Markdown("---")
                 gr.Markdown("## Mean Value")
                 gr.Markdown("A comparison of the average values of different features.")
-                plt_bar = gr.Plot()
+                bar_plot = gr.Plot(show_label=False)
 
                 stat_tab.select(lambda: self.current["summary"], None, df)
-                stat_tab.select(self._heatmap, None, plt_heatmap)
-                stat_tab.select(self._boxplot, None, plt_box)
-                stat_tab.select(self._barplot, None, plt_bar)
+                stat_tab.select(self._heatmap, None, heatmap_plot)
+                stat_tab.select(self._boxplot, None, box_plot)
+                stat_tab.select(self._barplot, None, bar_plot)
 
         tabs.change(lambda: plt.close())
