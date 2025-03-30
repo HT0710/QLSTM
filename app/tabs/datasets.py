@@ -21,16 +21,12 @@ class DatasetsTab:
         self.current = {
             "data": None,
             "processed": None,
-            "ma_size": 1,
             "group": "None",
             "from": None,
             "to": None,
         }
 
     def _show_data(self, df):
-        if self.current["ma_size"] > 1:
-            df = df.rolling(window=self.current["ma_size"], min_periods=1).mean()
-
         if self.current["group"] != "None":
             df = df.resample(self.current["group"]).mean()
 
@@ -71,7 +67,6 @@ class DatasetsTab:
 
         self.current["group"] = "None"
         self.current["processed"] = self.current["data"] = df
-        self.current["summary"] = self._summary(df)
 
         date_min = self.current["from"] = self.current["data"].index.min()
         date_max = self.current["to"] = self.current["data"].index.max()
@@ -162,18 +157,21 @@ class DatasetsTab:
         return self._show_data(self.current["processed"])
 
     def _moving_average(self, size: int):
-        self.current["ma_size"] = size
+        if size > 1:
+            self.current["processed"] = (
+                self.current["processed"].rolling(window=size, min_periods=1).mean()
+            )
 
         return self._show_data(self.current["processed"])
 
     def _summary(self, df: pd.DataFrame) -> pd.DataFrame:
-        summary = df.describe().T.reset_index()
+        summary = df.describe().T.round(2).reset_index()
         summary = summary.rename(columns={"index": "Statistic"})
 
         return summary
 
-    def _heatmap(self):
-        df = self.current["summary"][["Statistic", "mean", "std", "min", "max"]]
+    def _heatmap(self, df):
+        df = df[["Statistic", "mean", "std", "min", "max"]]
         df = df.set_index("Statistic")
 
         fig, ax = plt.subplots(figsize=(12, 6), dpi=200)
@@ -182,13 +180,13 @@ class DatasetsTab:
         fig.subplots_adjust(left=0.2, right=1, top=0.85, bottom=0.15)
 
         ax.set_title("Descriptive Statistics", fontsize=16, fontweight="bold", pad=14)
-        ax.set_xlabel("Statistic", fontsize=14, fontweight="bold", labelpad=14)
-        ax.set_ylabel("Feature", fontsize=14, fontweight="bold", labelpad=14)
+        ax.set_xlabel("Statistics", fontsize=14, fontweight="bold", labelpad=14)
+        ax.set_ylabel("Features", fontsize=14, fontweight="bold", labelpad=14)
 
         return fig
 
-    def _boxplot(self):
-        df = self.current["summary"][["Statistic", "25%", "50%", "75%"]]
+    def _boxplot(self, df):
+        df = df[["Statistic", "25%", "50%", "75%"]]
 
         df_melted = df.melt(
             id_vars=["Statistic"], var_name="Percentile", value_name="Value"
@@ -202,13 +200,13 @@ class DatasetsTab:
         fig.subplots_adjust(top=0.85, bottom=0.15)
 
         ax.set_title("Distribution Percentiles", fontsize=16, fontweight="bold", pad=14)
-        ax.set_xlabel("Feature", fontsize=14, fontweight="bold", labelpad=14)
-        ax.set_ylabel("Value", fontsize=14, fontweight="bold", labelpad=14)
+        ax.set_xlabel("Features", fontsize=14, fontweight="bold", labelpad=14)
+        ax.set_ylabel("Values", fontsize=14, fontweight="bold", labelpad=14)
 
         return fig
 
-    def _barplot(self):
-        df = self.current["summary"][["Statistic", "mean"]]
+    def _barplot(self, df):
+        df = df[["Statistic", "mean"]]
 
         fig, ax = plt.subplots(figsize=(12, 6), dpi=200)
 
@@ -216,11 +214,11 @@ class DatasetsTab:
             df, x="Statistic", y="mean", ax=ax, hue="Statistic", palette="viridis"
         )
 
-        fig.subplots_adjust(top=0.95, bottom=0.15)
+        fig.subplots_adjust(top=0.85, bottom=0.15)
 
         ax.set_title("Mean Value", fontsize=16, fontweight="bold", pad=14)
-        ax.set_xlabel("Feature", fontsize=14, fontweight="bold", labelpad=14)
-        ax.set_ylabel("Value", fontsize=14, fontweight="bold", labelpad=14)
+        ax.set_xlabel("Features", fontsize=14, fontweight="bold", labelpad=14)
+        ax.set_ylabel("Values", fontsize=14, fontweight="bold", labelpad=14)
 
         return fig
 
@@ -255,7 +253,7 @@ class DatasetsTab:
 
             fig.subplots_adjust(top=0.95, bottom=0.15)
 
-            ax.set_xlabel(x, fontsize=14, fontweight="bold", labelpad=14)
+            ax.set_xlabel("Time", fontsize=14, fontweight="bold", labelpad=14)
             ax.set_ylabel("Values", fontsize=14, fontweight="bold", labelpad=14)
 
         return fig
@@ -329,7 +327,7 @@ class DatasetsTab:
                                 label="Year", min_width=50, interactive=True
                             )
 
-                df = gr.Dataframe(
+                rev_df = gr.Dataframe(
                     max_height=600,
                     show_row_numbers=True,
                     show_fullscreen_button=True,
@@ -353,40 +351,40 @@ class DatasetsTab:
 
                 vis_radio.select(
                     self._select_vis,
-                    [df, vis_radio],
-                    [df, vis, vis_plot, x_dropdown, y_dropdown],
+                    [rev_df, vis_radio],
+                    [rev_df, vis, vis_plot, x_dropdown, y_dropdown],
                     scroll_to_output=True,
                 )
 
                 x_dropdown.select(
                     self._vis_plot,
-                    [df, vis_radio, x_dropdown, y_dropdown],
+                    [rev_df, vis_radio, x_dropdown, y_dropdown],
                     vis_plot,
                     scroll_to_output=True,
                 )
                 y_dropdown.select(
                     self._vis_plot,
-                    [df, vis_radio, x_dropdown, y_dropdown],
+                    [rev_df, vis_radio, x_dropdown, y_dropdown],
                     vis_plot,
                     scroll_to_output=True,
                 )
 
-                df.change(
+                rev_df.change(
                     self._vis_plot,
-                    [df, vis_radio, x_dropdown, y_dropdown],
+                    [rev_df, vis_radio, x_dropdown, y_dropdown],
                     vis_plot,
                     scroll_to_output=True,
                 )
 
                 index_radio.select(
-                    lambda x: gr.update(show_row_numbers=x == "On"), index_radio, df
+                    lambda x: gr.update(show_row_numbers=x == "On"), index_radio, rev_df
                 )
 
                 for field in [fday, fmonth, fyear]:
                     field.select(
                         fn=partial(self._change_time, indicator="from"),
                         inputs=[fyear, fmonth, fday],
-                        outputs=[fday, df],
+                        outputs=[fday, rev_df],
                         scroll_to_output=True,
                     )
 
@@ -394,36 +392,42 @@ class DatasetsTab:
                     field.select(
                         fn=partial(self._change_time, indicator="to"),
                         inputs=[tyear, tmonth, tday],
-                        outputs=[tday, df],
+                        outputs=[tday, rev_df],
                         scroll_to_output=True,
                     )
 
                 group_dropdown.select(
-                    self._change_group, group_dropdown, df, scroll_to_output=True
-                )
-                fmh_radio.select(
-                    self._fill_missing_hours, fmh_radio, df, scroll_to_output=True
+                    self._change_group, group_dropdown, rev_df, scroll_to_output=True
                 )
                 ma_slider.release(
-                    self._moving_average, ma_slider, df, scroll_to_output=True
+                    lambda: gr.update(selected=0), None, tabs, scroll_to_output=True
+                )
+                fmh_radio.select(
+                    lambda: gr.update(selected=0), None, tabs, scroll_to_output=True
                 )
                 data_dropdown.select(
                     lambda: gr.update(selected=0), None, tabs, scroll_to_output=True
                 )
-                data_dropdown.change(
+                ma_slider.release(
+                    self._moving_average, ma_slider, rev_df, scroll_to_output=True
+                )
+                fmh_radio.select(
+                    self._fill_missing_hours, fmh_radio, rev_df, scroll_to_output=True
+                )
+                data_dropdown.select(
                     self._change_data,
                     data_dropdown,
-                    [df, fyear, fmonth, fday, tyear, tmonth, tday],
+                    [rev_df, fyear, fmonth, fday, tyear, tmonth, tday],
                 )
                 self.parent.load(
                     self._change_data,
                     data_dropdown,
-                    [df, fyear, fmonth, fday, tyear, tmonth, tday],
+                    [rev_df, fyear, fmonth, fday, tyear, tmonth, tday],
                 )
 
-            with gr.Tab("Statistic", id=1) as stat_tab:
+            with gr.Tab("Statistics", id=1) as stat_tab:
                 gr.Markdown("## Review Table")
-                df = gr.Dataframe()
+                stat_df = gr.Dataframe()
 
                 gr.Markdown("---")
                 gr.Markdown("## Descriptive Statistics")
@@ -444,9 +448,19 @@ class DatasetsTab:
                 gr.Markdown("A comparison of the average values of different features.")
                 bar_plot = gr.Plot(show_label=False)
 
-                stat_tab.select(lambda: self.current["summary"], None, df)
-                stat_tab.select(self._heatmap, None, heatmap_plot)
-                stat_tab.select(self._boxplot, None, box_plot)
-                stat_tab.select(self._barplot, None, bar_plot)
+                stat_df.change(self._barplot, stat_df, bar_plot)
+                stat_df.change(self._boxplot, stat_df, box_plot)
+                stat_df.change(self._heatmap, stat_df, heatmap_plot)
+                stat_tab.select(
+                    lambda: self._summary(self.current["processed"]), None, stat_df
+                )
+
+            with gr.Tab("Correlation", id=2) as corr_tab:
+                gr.Markdown("## Review Table")
+                corr_df = gr.Dataframe()
+
+                # corr_tab.select(
+                #     lambda: self.current["summary"].round(2).reset_index(), None, df
+                # )
 
         tabs.change(lambda: plt.close())
