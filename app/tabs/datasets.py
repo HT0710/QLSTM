@@ -44,7 +44,7 @@ class DatasetsTab:
             value=df.round(2).reset_index(), label=f"Number of Rows: {len(df)}"
         )
 
-    def _change_data(self, data_name):
+    def _select_data(self, data_name):
         df = pd.read_csv(str(self.data_path / data_name))
 
         # Drop unnamed columns
@@ -91,12 +91,12 @@ class DatasetsTab:
             gr.update(choices=max_day_range, value=date_max.day),
         )
 
-    def _change_group(self, group):
+    def _select_group(self, group):
         self.current["group"] = group
 
         return self._show_data(self.current["processed"])
 
-    def _change_time(self, y, m, d, indicator):
+    def _select_time(self, y, m, d, indicator):
         _, new_num_days = monthrange(y, m)
         d = min(d, new_num_days)
 
@@ -256,11 +256,20 @@ class DatasetsTab:
 
         return fig
 
-    def _correlation(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _select_corr(self):
+        df = self.current["processed"]
+
         corr = df.corr().round(2).reset_index()
         corr = corr.rename(columns={"index": "Features"})
 
-        return corr
+        features = list(df.columns)
+
+        return (
+            corr,
+            gr.update(choices=features, value=features[0]),
+            gr.update(choices=features, value=features[-1]),
+            self._corr_pairwise(features[0], features[-1]),
+        )
 
     def _corr_heatmap(self, df):
         df = df.set_index("Features")
@@ -278,9 +287,6 @@ class DatasetsTab:
         return fig
 
     def _corr_pairwise(self, x, y):
-        if not (x or y):
-            return None
-
         df = self.current["processed"]
 
         fig, ax = plt.subplots(figsize=(10, 6), dpi=200)
@@ -403,24 +409,20 @@ class DatasetsTab:
                     lambda x: gr.update(show_row_numbers=x == "On"), index_radio, rev_df
                 )
 
-                for field in [fday, fmonth, fyear]:
-                    field.select(
-                        fn=partial(self._change_time, indicator="from"),
-                        inputs=[fyear, fmonth, fday],
-                        outputs=[fday, rev_df],
-                        scroll_to_output=True,
-                    )
-
-                for field in [tday, tmonth, tyear]:
-                    field.select(
-                        fn=partial(self._change_time, indicator="to"),
-                        inputs=[tyear, tmonth, tday],
-                        outputs=[tday, rev_df],
-                        scroll_to_output=True,
-                    )
+                for key, values in {
+                    "from": [fyear, fmonth, fday],
+                    "to": [tyear, tmonth, tday],
+                }.items():
+                    for value in values:
+                        value.select(
+                            fn=partial(self._select_time, indicator="from"),
+                            inputs=values,
+                            outputs=[values[-1], rev_df],
+                            scroll_to_output=True,
+                        )
 
                 group_dropdown.select(
-                    self._change_group, group_dropdown, rev_df, scroll_to_output=True
+                    self._select_group, group_dropdown, rev_df, scroll_to_output=True
                 )
                 ma_slider.release(
                     lambda: gr.update(selected=0), None, tabs, scroll_to_output=True
@@ -438,12 +440,12 @@ class DatasetsTab:
                     self._fill_missing_hours, fmh_radio, rev_df, scroll_to_output=True
                 )
                 data_dropdown.select(
-                    self._change_data,
+                    self._select_data,
                     data_dropdown,
                     [rev_df, fyear, fmonth, fday, tyear, tmonth, tday],
                 )
                 self.parent.load(
-                    self._change_data,
+                    self._select_data,
                     data_dropdown,
                     [rev_df, fyear, fmonth, fday, tyear, tmonth, tday],
                 )
@@ -508,13 +510,6 @@ class DatasetsTab:
                     with gr.Column(scale=4):
                         pairwise_plot = gr.Plot(show_label=False)
 
-                corr_tab.select(
-                    lambda: [gr.update(choices=list(self.current["processed"].columns))]
-                    * 2,
-                    None,
-                    [x_dropdown, y_dropdown],
-                )
-
                 x_dropdown.select(
                     self._corr_pairwise,
                     [x_dropdown, y_dropdown],
@@ -529,8 +524,11 @@ class DatasetsTab:
                 )
 
                 corr_df.change(self._corr_heatmap, corr_df, heatmap_plot)
+
                 corr_tab.select(
-                    lambda: self._correlation(self.current["processed"]), None, corr_df
+                    self._select_corr,
+                    None,
+                    [corr_df, x_dropdown, y_dropdown, pairwise_plot],
                 )
 
         tabs.change(lambda: plt.close())
