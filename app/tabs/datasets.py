@@ -164,6 +164,40 @@ class DatasetsTab:
 
         return self._show_data(self.current["processed"])
 
+    def _select_vis(self, df, mode):
+        plot = y_axis = None
+
+        if mode == "On":
+            y_axis = gr.update(
+                choices=[c for c in df.columns if c != "Datetime"],
+                value=[df.columns[-1]],
+            )
+
+            plot = self._vis_plot(df, mode, y_axis["value"])
+
+        return (
+            gr.update(visible=mode == "Off"),
+            gr.update(visible=mode == "On"),
+            plot,
+            y_axis,
+        )
+
+    def _vis_plot(self, df, mode, y):
+        if not (mode == "On" or y):
+            return None
+
+        fig, ax = plt.subplots(figsize=(10, 6), dpi=200)
+
+        for feature in y:
+            sns.lineplot(x=pd.to_datetime(df["Datetime"]), y=df[feature], ax=ax)
+
+        fig.subplots_adjust(top=0.95, bottom=0.15)
+
+        ax.set_xlabel("Time", fontsize=14, fontweight="bold", labelpad=14)
+        ax.set_ylabel("Values", fontsize=14, fontweight="bold", labelpad=14)
+
+        return fig
+
     def _summary(self, df: pd.DataFrame) -> pd.DataFrame:
         summary = df.describe().T.round(2).reset_index()
         summary = summary.rename(columns={"index": "Statistic"})
@@ -222,39 +256,41 @@ class DatasetsTab:
 
         return fig
 
-    def _select_vis(self, df, mode):
-        plot = x_axis = y_axis = None
+    def _correlation(self, df: pd.DataFrame) -> pd.DataFrame:
+        corr = df.corr().round(2).reset_index()
+        corr = corr.rename(columns={"index": "Features"})
 
-        if mode == "On":
-            x_axis = gr.update(choices=["Datetime"], value="Datetime")
-            y_axis = gr.update(
-                choices=[c for c in df.columns if c != "Datetime"],
-                value=[df.columns[-1]],
-            )
+        return corr
 
-            plot = self._vis_plot(df, mode, x_axis["value"], y_axis["value"])
+    def _corr_heatmap(self, df):
+        df = df.set_index("Features")
 
-        return (
-            gr.update(visible=mode == "Off"),
-            gr.update(visible=mode == "On"),
-            plot,
-            x_axis,
-            y_axis,
-        )
+        fig, ax = plt.subplots(figsize=(12, 6), dpi=200)
 
-    def _vis_plot(self, df, mode, x, y):
-        fig = None
+        sns.heatmap(df, annot=True, fmt=".2f", cmap="coolwarm", ax=ax, linewidths=0.5)
 
-        if mode == "On" and x and y:
-            fig, ax = plt.subplots(figsize=(10, 6), dpi=200)
+        fig.subplots_adjust(left=0.25, right=0.95, top=0.85, bottom=0.25)
 
-            for feature in y:
-                sns.lineplot(x=pd.to_datetime(df[x]), y=df[feature], ax=ax)
+        ax.set_title("Correlation Heatmap", fontsize=16, fontweight="bold", pad=14)
+        ax.set_xlabel("Features", fontsize=14, fontweight="bold", labelpad=14)
+        ax.set_ylabel("Features", fontsize=14, fontweight="bold", labelpad=14)
 
-            fig.subplots_adjust(top=0.95, bottom=0.15)
+        return fig
 
-            ax.set_xlabel("Time", fontsize=14, fontweight="bold", labelpad=14)
-            ax.set_ylabel("Values", fontsize=14, fontweight="bold", labelpad=14)
+    def _corr_pairwise(self, x, y):
+        if not (x or y):
+            return None
+
+        df = self.current["processed"]
+
+        fig, ax = plt.subplots(figsize=(10, 6), dpi=200)
+
+        sns.scatterplot(df, x=x, y=y, ax=ax)
+
+        fig.subplots_adjust(top=0.95, bottom=0.15)
+
+        ax.set_xlabel(x, fontsize=14, fontweight="bold", labelpad=14)
+        ax.set_ylabel(y, fontsize=14, fontweight="bold", labelpad=14)
 
         return fig
 
@@ -337,13 +373,8 @@ class DatasetsTab:
                 with gr.Row(visible=False) as vis:
                     with gr.Column(scale=1, min_width=0):
                         gr.Markdown("### Configuration")
-                        x_dropdown = gr.Dropdown(
-                            label="X-Axis (Horizontal)", interactive=True
-                        )
-                        y_dropdown = gr.Dropdown(
-                            label="Y-Axis (Vertical)",
-                            multiselect=True,
-                            interactive=True,
+                        features_dropdown = gr.Dropdown(
+                            label="Features", multiselect=True, interactive=True
                         )
 
                     with gr.Column(scale=4):
@@ -352,26 +383,18 @@ class DatasetsTab:
                 vis_radio.select(
                     self._select_vis,
                     [rev_df, vis_radio],
-                    [rev_df, vis, vis_plot, x_dropdown, y_dropdown],
+                    [rev_df, vis, vis_plot, features_dropdown],
                     scroll_to_output=True,
                 )
-
-                x_dropdown.select(
+                features_dropdown.select(
                     self._vis_plot,
-                    [rev_df, vis_radio, x_dropdown, y_dropdown],
+                    [rev_df, vis_radio, features_dropdown],
                     vis_plot,
                     scroll_to_output=True,
                 )
-                y_dropdown.select(
-                    self._vis_plot,
-                    [rev_df, vis_radio, x_dropdown, y_dropdown],
-                    vis_plot,
-                    scroll_to_output=True,
-                )
-
                 rev_df.change(
                     self._vis_plot,
-                    [rev_df, vis_radio, x_dropdown, y_dropdown],
+                    [rev_df, vis_radio, features_dropdown],
                     vis_plot,
                     scroll_to_output=True,
                 )
@@ -459,8 +482,55 @@ class DatasetsTab:
                 gr.Markdown("## Review Table")
                 corr_df = gr.Dataframe()
 
-                # corr_tab.select(
-                #     lambda: self.current["summary"].round(2).reset_index(), None, df
-                # )
+                gr.Markdown("---")
+                gr.Markdown("## Correlation Heatmap")
+                gr.Markdown(
+                    "A visual representation of feature correlations, highlighting the strength and direction of relationships among variables."
+                )
+                heatmap_plot = gr.Plot(show_label=False)
+
+                gr.Markdown("---")
+                gr.Markdown("## Pairwise Relationships")
+                gr.Markdown(
+                    "Scatter plots showing relationships between feature pairs, useful for detecting linear and non-linear trends."
+                )
+
+                with gr.Row():
+                    with gr.Column(scale=1, min_width=0):
+                        gr.Markdown("### Configuration")
+                        x_dropdown = gr.Dropdown(
+                            label="X-Axis (Horizontal)", interactive=True
+                        )
+                        y_dropdown = gr.Dropdown(
+                            label="Y-Axis (Vertical)", interactive=True
+                        )
+
+                    with gr.Column(scale=4):
+                        pairwise_plot = gr.Plot(show_label=False)
+
+                corr_tab.select(
+                    lambda: [gr.update(choices=list(self.current["processed"].columns))]
+                    * 2,
+                    None,
+                    [x_dropdown, y_dropdown],
+                )
+
+                x_dropdown.select(
+                    self._corr_pairwise,
+                    [x_dropdown, y_dropdown],
+                    pairwise_plot,
+                    scroll_to_output=True,
+                )
+                y_dropdown.select(
+                    self._corr_pairwise,
+                    [x_dropdown, y_dropdown],
+                    pairwise_plot,
+                    scroll_to_output=True,
+                )
+
+                corr_df.change(self._corr_heatmap, corr_df, heatmap_plot)
+                corr_tab.select(
+                    lambda: self._correlation(self.current["processed"]), None, corr_df
+                )
 
         tabs.change(lambda: plt.close())
