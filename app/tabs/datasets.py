@@ -415,7 +415,7 @@ class DatasetsTab:
                 }.items():
                     for value in values:
                         value.select(
-                            fn=partial(self._select_time, indicator="from"),
+                            fn=partial(self._select_time, indicator=key),
                             inputs=values,
                             outputs=[values[-1], rev_df],
                             scroll_to_output=True,
