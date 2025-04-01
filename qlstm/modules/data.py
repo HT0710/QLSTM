@@ -154,10 +154,10 @@ class CustomDataModule(LightningDataModule):
             return value
 
     @staticmethod
-    def _fill_hours(df: pd.DataFrame):
+    def _fill_hours(df: pd.DataFrame, start=6, end=18):
         filled_rows = []
         prev_date = None
-        prev_hour = -1
+        prev_hour = start - 1
 
         def add_rows(date, start, end):
             new_rows = []
@@ -177,8 +177,8 @@ class CustomDataModule(LightningDataModule):
 
             # If current hour < previous hour, a new day started
             if curr_hour < prev_hour:
-                add_rows(prev_date, prev_hour + 1, 24)
-                add_rows(curr_date, 0, curr_hour)
+                add_rows(prev_date, prev_hour + 1, end + 1)
+                add_rows(curr_date, start, curr_hour)
             else:
                 add_rows(curr_date, prev_hour + 1, curr_hour)
 
@@ -249,7 +249,11 @@ class CustomDataModule(LightningDataModule):
         data["hour_sin"] = np.sin(_angle)
         data["hour_cos"] = np.cos(_angle)
 
+        # Moving Average
         data["rolling_mean"] = data[self.labels].rolling(window=6, min_periods=1).mean()
+
+        # Set "datetime" as index
+        data = data.set_index("datetime")
 
         # Drop unnecessary columns
         x_columns = set(
@@ -261,7 +265,7 @@ class CustomDataModule(LightningDataModule):
         data = data.dropna().round(4)
 
         # Save new data
-        data.to_csv(str(self.processed_path), index=False)
+        data.to_csv(str(self.processed_path), index=True)
 
     def setup(self, stage: str):
         if not hasattr(self, "dataset"):
