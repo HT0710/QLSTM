@@ -1,5 +1,6 @@
 from calendar import monthrange
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 
 import gradio as gr
@@ -7,6 +8,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import rootutils
+import seaborn as sns
 import torch
 from matplotlib import pyplot as plt
 
@@ -26,7 +28,9 @@ class DemoTab:
         self.root = Path("./qlstm")
         self.data_path = self.root / "data"
         self.model_path = self.root / "models"
-        self.dataset = list(self.data_path.glob("*.csv"))
+        self.dataset = sorted(
+            [i.name for i in self.data_path.glob("*.csv") if not i.match("*.x.csv")]
+        )
         self.datasets = {}
         self.models = {
             "LSTM": {
@@ -47,72 +51,89 @@ class DemoTab:
                 "checkpoint": "lightning_logs/cQLSTMf/version_9/checkpoints/last.ckpt",
             },
         }
-        self.steps = None
+        self.current = {
+            "data": None,
+            "from": None,
+            "to": None,
+        }
 
-    def _load_data(self, data_name):
-        return pd.read_csv(str(self.data_path / data_name))
+    def _select_data(self, data_name):
+        data = CustomDataModule(
+            data_path=str(self.data_path / data_name),
+            features="5-11",
+            labels=[11],
+            time_steps=24,
+            overlap=True,
+        )
+        data.prepare_data()
+        data.setup("predict")
 
-    def _calculate_hours(self, year_1, month_1, day_1, year_2, month_2, day_2):
-        dt_1 = datetime(year_1, month_1, day_1).timestamp()
-        dt_2 = datetime(year_2, month_2, day_2).timestamp()
+        datetime = pd.read_csv(
+            data.processed_path, parse_dates=["datetime"], index_col="datetime"
+        ).index
 
-        delta = int((dt_2 - dt_1) / 3600)
+        self.current["data"] = pd.DataFrame(
+            [{"datetime": t, "batch": b} for t, b in zip(datetime, data.dataset)]
+        ).set_index("datetime")
+        self.current["encoder"] = data.encoder
 
-        self.steps = max(0, delta)
+        years = datetime.year
+        year_range = range(years.min(), years.max() + 1)
 
-    def _update_days(self, year, month, day):
-        _, num_days = monthrange(year, month)
-        return gr.Dropdown(choices=range(1, num_days + 1), value=min(day, num_days))
+        self.current["from"] = datetime.min()
+        self.current["to"] = datetime.min() + pd.DateOffset(days=7)
 
-    def _update_years(self, data_name: str):
-        key = "Year" if data_name.startswith("place") else "year"
-        years = self._load_data(data_name).get(key, np.array([2025]))
-        _range = range(years.min(), years.max() + 1)
-        return [gr.Dropdown(choices=_range, value=int(years.min()))] * 2
+        return (
+            self._predict(),
+            gr.update(choices=year_range, value=int(years.min())),
+            gr.update(choices=year_range, value=int(years.min())),
+        )
 
-    def _predict(self, model_name, data_name):
-        # Define dataset
-        if data_name not in self.datasets:
-            self.datasets[data_name] = CustomDataModule(
-                data_path=str(self.data_path / data_name),
-                features="5-11",
-                labels=[11],
-                time_steps=24,
-                overlap=True,
-            )
-            self.datasets[data_name].prepare_data()
-            self.datasets[data_name].setup("predict")
-        data = self.datasets[data_name]
+    def _select_time(self, y, m, d, indicator):
+        _, new_num_days = monthrange(y, m)
+        d = min(d, new_num_days)
 
-        # Define lightning model
+        self.current[indicator] = datetime(y, m, d)
+
+        return gr.update(choices=range(1, new_num_days + 1), value=d)
+
+    def _select_model(self, model_name):
         model = self.models[model_name]
-        if "loaded" not in model:
-            model["loaded"] = LitModel(
-                model=model["init"], checkpoint=model["checkpoint"]
-            ).eval()
+        self.current["model"] = LitModel(
+            model["init"], checkpoint=model["checkpoint"]
+        ).eval()
 
-        # Inference loop
+    def _predict(self):
+        plt.close()
+
+        plt.figure(figsize=(24, 7))
+
         with torch.inference_mode():
-            # Close old figures and create a new one
-            plt.close()
-            plt.figure(figsize=(24, 7))
+            subset = self.current["data"][self.current["from"] : self.current["to"]]
 
-            if self.steps == 0:
-                return plt
+            outs = []
+            labels = []
+            for X, y in subset["batch"].values:
+                outs.append(self.current["model"](X.unsqueeze(0)).squeeze(-1))
+                labels.append(y)
 
-            X, y = data.dataset[: self.steps]
-            out = np.array([model["loaded"](x.unsqueeze(0)).squeeze(-1) for x in X])
+            outs = np.array(outs)
+            labels = np.array(labels)
 
             # Denormalize
-            y = data.encoder["label"].inverse_transform(y.reshape(-1, 1))
-            out = data.encoder["label"].inverse_transform(out)
+            labels = self.current["encoder"]["label"].inverse_transform(
+                labels.reshape(-1, 1)
+            )
+            outs = self.current["encoder"]["label"].inverse_transform(outs)
 
-            plt.plot(range(len(y)), y, label="Actual", alpha=0.7, linewidth=2)
-            plt.plot(range(len(out)), out, label="Prediction", alpha=0.7, linewidth=2)
-            plt.xlabel("Time (hour)")
-            plt.ylabel("Power (kW)")
-            plt.legend()
-            plt.tight_layout()
+        for y in [outs, labels]:
+            sns.lineplot(x=subset.reset_index()["datetime"], y=y.ravel())
+
+        plt.xlabel("Time")
+        plt.ylabel("Power (kW)")
+
+        plt.legend()
+        plt.tight_layout()
 
         return plt
 
@@ -126,9 +147,7 @@ class DemoTab:
                     interactive=True,
                 )
                 data_dropdown = gr.Dropdown(
-                    choices=[str(x.name) for x in self.dataset],
-                    label="Dataset",
-                    interactive=True,
+                    choices=self.dataset, label="Dataset", interactive=True
                 )
                 button = gr.Button("Run")
 
@@ -136,55 +155,50 @@ class DemoTab:
                 gr.Markdown("### From")
                 with gr.Row():
                     fday = gr.Dropdown(
-                        range(1, 32),
-                        label="Day",
-                        min_width=50,
-                        interactive=True,
+                        choices=range(1, 32), label="Day", min_width=0, interactive=True
                     )
                     fmonth = gr.Dropdown(
-                        range(1, 13),
+                        choices=range(1, 13),
                         label="Month",
-                        min_width=50,
+                        min_width=0,
                         interactive=True,
                     )
-                    fyear = gr.Dropdown(
-                        label="Year",
-                        min_width=50,
-                        interactive=True,
-                    )
-
-                    fmonth.select(self._update_days, [fyear, fmonth, fday], fday)
-                    fyear.select(self._update_days, [fyear, fmonth, fday], fday)
+                    fyear = gr.Dropdown(label="Year", min_width=0, interactive=True)
 
                 gr.Markdown("### To")
                 with gr.Row():
                     tday = gr.Dropdown(
-                        range(1, 32),
+                        choices=range(1, 32),
+                        value=8,
                         label="Day",
-                        min_width=50,
+                        min_width=0,
                         interactive=True,
                     )
                     tmonth = gr.Dropdown(
-                        range(1, 13),
+                        choices=range(1, 13),
                         label="Month",
-                        min_width=50,
+                        min_width=0,
                         interactive=True,
                     )
-                    tyear = gr.Dropdown(
-                        label="Year",
-                        min_width=50,
-                        interactive=True,
-                    )
-
-                    tmonth.select(self._update_days, [tyear, tmonth, tday], tday)
-                    tyear.select(self._update_days, [tyear, tmonth, tday], tday)
+                    tyear = gr.Dropdown(label="Year", min_width=0, interactive=True)
 
         gr.Markdown("### Result")
         with gr.Row():
             plot = gr.Plot(show_label=False)
 
-        data_dropdown.select(self._update_years, [data_dropdown], [fyear, tyear])
-        self.parent.load(self._update_years, [data_dropdown], [fyear, tyear])
+        for key, values in {
+            "from": [fyear, fmonth, fday],
+            "to": [tyear, tmonth, tday],
+        }.items():
+            for value in values:
+                value.select(
+                    partial(self._select_time, indicator=key), values, values[-1]
+                )
 
-        button.click(self._calculate_hours, [fyear, fmonth, fday, tyear, tmonth, tday])
-        button.click(self._predict, [model_dropdown, data_dropdown], plot)
+        button.click(self._predict, None, plot)
+
+        data_dropdown.select(self._select_data, data_dropdown, [plot, fyear, tyear])
+        model_dropdown.select(self._select_model, model_dropdown)
+
+        self.parent.load(self._select_data, data_dropdown, [plot, fyear, tyear])
+        self.parent.load(self._select_model, model_dropdown)
