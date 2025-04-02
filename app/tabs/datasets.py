@@ -15,9 +15,7 @@ class DatasetsTab:
         self.parent = parent
         self.root = Path("./qlstm")
         self.data_path = self.root / "data"
-        self.datasets = sorted(
-            [i.name for i in self.data_path.glob("*.csv") if not i.match("*.x.csv")]
-        )
+        self.datasets = sorted([i.name for i in self.data_path.glob("*.csv")])
         self.current = {
             "data": None,
             "processed": None,

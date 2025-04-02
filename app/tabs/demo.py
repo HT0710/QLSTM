@@ -28,9 +28,7 @@ class DemoTab:
         self.root = Path("./qlstm")
         self.data_path = self.root / "data"
         self.model_path = self.root / "models"
-        self.dataset = sorted(
-            [i.name for i in self.data_path.glob("*.csv") if not i.match("*.x.csv")]
-        )
+        self.dataset = sorted([i.name for i in self.data_path.glob("*.csv")])
         self.datasets = {}
         self.models = {
             "LSTM": {
@@ -75,7 +73,7 @@ class DemoTab:
         self.current["data"] = pd.DataFrame(
             [{"datetime": t, "batch": b} for t, b in zip(datetime, data.dataset)]
         ).set_index("datetime")
-        self.current["encoder"] = data.encoder
+        self.current["decoder"] = data.encoder["label"].inverse_transform
 
         years = datetime.year
         year_range = range(years.min(), years.max() + 1)
@@ -89,6 +87,12 @@ class DemoTab:
             gr.update(choices=year_range, value=int(years.min())),
         )
 
+    def _select_model(self, model_name):
+        model = self.models[model_name]
+        self.current["model"] = LitModel(
+            model["init"], checkpoint=model["checkpoint"]
+        ).eval()
+
     def _select_time(self, y, m, d, indicator):
         _, new_num_days = monthrange(y, m)
         d = min(d, new_num_days)
@@ -97,45 +101,63 @@ class DemoTab:
 
         return gr.update(choices=range(1, new_num_days + 1), value=d)
 
-    def _select_model(self, model_name):
-        model = self.models[model_name]
-        self.current["model"] = LitModel(
-            model["init"], checkpoint=model["checkpoint"]
-        ).eval()
-
     def _predict(self):
         plt.close()
 
-        plt.figure(figsize=(24, 7))
+        fig, ax = plt.subplots(figsize=(16, 5), dpi=200)
 
         with torch.inference_mode():
-            subset = self.current["data"][self.current["from"] : self.current["to"]]
+            subset = self.current["data"][
+                self.current["from"] : self.current["to"]
+            ].reset_index()
 
             outs = []
             labels = []
-            for X, y in subset["batch"].values:
+
+            for X, y in subset["batch"]:
                 outs.append(self.current["model"](X.unsqueeze(0)).squeeze(-1))
                 labels.append(y)
 
-            outs = np.array(outs)
-            labels = np.array(labels)
-
             # Denormalize
-            labels = self.current["encoder"]["label"].inverse_transform(
-                labels.reshape(-1, 1)
-            )
-            outs = self.current["encoder"]["label"].inverse_transform(outs)
+            outs = self.current["decoder"](np.array(outs))
+            labels = self.current["decoder"](np.array(labels))
 
-        for y in [outs, labels]:
-            sns.lineplot(x=subset.reset_index()["datetime"], y=y.ravel())
+            times = []
+            outs_tilda = []
+            labels_tilda = []
 
-        plt.xlabel("Time")
-        plt.ylabel("Power (kW)")
+            for i in range(len(subset["datetime"])):
+                if i == 0:
+                    times.append(subset["datetime"][i])
+                    outs_tilda.append(outs[i])
+                    labels_tilda.append(labels[i])
+                    continue
 
-        plt.legend()
-        plt.tight_layout()
+                delta = subset["datetime"][i] - subset["datetime"][i - 1]
 
-        return plt
+                for j in range(1, delta.components.hours):
+                    times.append(subset["datetime"][i - 1] + pd.Timedelta(hours=j))
+                    outs_tilda.append(torch.zeros(1))
+                    labels_tilda.append(torch.zeros(1))
+
+                times.append(subset["datetime"][i])
+                outs_tilda.append(outs[i])
+                labels_tilda.append(labels[i])
+
+        times, outs_tilda, labels_tilda = map(
+            np.array, [times, outs_tilda, labels_tilda]
+        )
+
+        for k, v in [("Predicted", outs_tilda), ("Actual", labels_tilda)]:
+            sns.lineplot(x=times, y=v.ravel(), ax=ax, label=k)
+
+        fig.subplots_adjust(left=0.1, right=0.95, top=0.85, bottom=0.15)
+
+        ax.set_title("PV Power Output", fontsize=16, fontweight="bold", pad=14)
+        ax.set_xlabel("Time", fontsize=14, fontweight="bold", labelpad=14)
+        ax.set_ylabel("Power (kW)", fontsize=14, fontweight="bold", labelpad=14)
+
+        return fig
 
     def __call__(self):
         with gr.Row():
@@ -169,7 +191,7 @@ class DemoTab:
                 with gr.Row():
                     tday = gr.Dropdown(
                         choices=range(1, 32),
-                        value=8,
+                        value=7,
                         label="Day",
                         min_width=0,
                         interactive=True,
