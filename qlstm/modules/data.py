@@ -94,7 +94,10 @@ class CustomDataModule(LightningDataModule):
         if len(path.suffixes) > 1 and path.suffixes[-2] == ".x":
             return path
 
-        return path.parent / f"{path.stem}.x{path.suffix}"
+        save_folder = path.parent / "trainable"
+        save_folder.mkdir(parents=True, exist_ok=True)
+
+        return save_folder / f"{path.stem}.x{path.suffix}"
 
     @staticmethod
     def _load_data(path: Path, **kargs) -> pd.DataFrame:
@@ -167,7 +170,7 @@ class CustomDataModule(LightningDataModule):
                     if col == "datetime":
                         row[col] = date + pd.DateOffset(hours=h)
                     else:
-                        row[col] = 0
+                        row[col] = np.nan
                 new_rows.append(row)
             filled_rows.extend(new_rows)
 
@@ -243,6 +246,7 @@ class CustomDataModule(LightningDataModule):
 
         # Fill missing hours
         data = self._fill_hours(data)
+        data.interpolate(method="linear", inplace=True)
 
         # Cyclical Features Encoding
         _angle = 2 * np.pi * data["datetime"].dt.hour / 24
