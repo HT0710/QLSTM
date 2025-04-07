@@ -82,7 +82,6 @@ class DemoTab:
         self.current["to"] = datetime.min() + pd.DateOffset(days=7)
 
         return (
-            self._predict(),
             gr.update(choices=year_range, value=int(years.min())),
             gr.update(choices=year_range, value=int(years.min())),
         )
@@ -106,49 +105,52 @@ class DemoTab:
 
         fig, ax = plt.subplots(figsize=(16, 5), dpi=200)
 
+        subset = self.current["data"][
+            self.current["from"] : self.current["to"]
+        ].reset_index()
+
+        if subset.empty:
+            return fig
+
+        outs = []
+        labels = []
+
         with torch.inference_mode():
-            subset = self.current["data"][
-                self.current["from"] : self.current["to"]
-            ].reset_index()
-
-            outs = []
-            labels = []
-
             for X, y in subset["batch"]:
                 outs.append(self.current["model"](X.unsqueeze(0)).squeeze(-1))
                 labels.append(y)
 
-            # Denormalize
-            outs = self.current["decoder"](np.array(outs))
-            labels = self.current["decoder"](np.array(labels))
+        # Denormalize
+        outs = self.current["decoder"](np.array(outs))
+        labels = self.current["decoder"](np.array(labels))
 
-            times = []
-            outs_tilda = []
-            labels_tilda = []
+        times = []
+        outs_tilda = []
+        labels_tilda = []
 
-            for i in range(len(subset["datetime"])):
-                if i == 0:
-                    times.append(subset["datetime"][i])
-                    outs_tilda.append(outs[i])
-                    labels_tilda.append(labels[i])
-                    continue
-
-                delta = subset["datetime"][i] - subset["datetime"][i - 1]
-
-                for j in range(1, delta.components.hours):
-                    times.append(subset["datetime"][i - 1] + pd.Timedelta(hours=j))
-                    outs_tilda.append(torch.zeros(1))
-                    labels_tilda.append(torch.zeros(1))
-
+        for i in range(len(subset["datetime"])):
+            if i == 0:
                 times.append(subset["datetime"][i])
                 outs_tilda.append(outs[i])
                 labels_tilda.append(labels[i])
+                continue
+
+            delta = subset["datetime"][i] - subset["datetime"][i - 1]
+
+            for j in range(1, delta.components.hours):
+                times.append(subset["datetime"][i - 1] + pd.Timedelta(hours=j))
+                outs_tilda.append(torch.zeros(1))
+                labels_tilda.append(torch.zeros(1))
+
+            times.append(subset["datetime"][i])
+            outs_tilda.append(outs[i])
+            labels_tilda.append(labels[i])
 
         times, outs_tilda, labels_tilda = map(
             np.array, [times, outs_tilda, labels_tilda]
         )
 
-        for k, v in [("Predicted", outs_tilda), ("Actual", labels_tilda)]:
+        for k, v in [("Actual", labels_tilda), ("Predicted", outs_tilda)]:
             sns.lineplot(x=times, y=v.ravel(), ax=ax, label=k)
 
         fig.subplots_adjust(left=0.1, right=0.95, top=0.85, bottom=0.15)
@@ -159,19 +161,44 @@ class DemoTab:
 
         return fig
 
+    def _update_time(self, y, m, d, indicator):
+        date = self._select_time(y, m, d, indicator)
+        plot = self._predict()
+
+        return plot, date
+
+    def _update_data(self, data_name):
+        fyear, tyear = self._select_data(data_name)
+        plot = self._predict()
+
+        return plot, fyear, tyear
+
+    def _update_model(self, model_name):
+        self._select_model(model_name)
+        plot = self._predict()
+
+        return plot
+
+    def _init(self, data_name, model_name):
+        fyear, tyear = self._select_data(data_name)
+        self._select_model(model_name)
+        plot = self._predict()
+
+        return plot, fyear, tyear
+
     def __call__(self):
         with gr.Row():
-            with gr.Column():
-                gr.Markdown("### Configuration")
-                model_dropdown = gr.Dropdown(
-                    choices=self.models.keys(),
-                    label="Model",
-                    interactive=True,
-                )
-                data_dropdown = gr.Dropdown(
-                    choices=self.dataset, label="Dataset", interactive=True
-                )
-                button = gr.Button("Run")
+            with gr.Column(scale=2):
+                gr.Markdown("### Options")
+                with gr.Row():
+                    model_dropdown = gr.Dropdown(
+                        choices=self.models.keys(),
+                        label="Model",
+                        interactive=True,
+                    )
+                    data_dropdown = gr.Dropdown(
+                        choices=self.dataset, label="Dataset", interactive=True
+                    )
 
             with gr.Column():
                 gr.Markdown("### From")
@@ -187,6 +214,7 @@ class DemoTab:
                     )
                     fyear = gr.Dropdown(label="Year", min_width=0, interactive=True)
 
+            with gr.Column():
                 gr.Markdown("### To")
                 with gr.Row():
                     tday = gr.Dropdown(
@@ -212,15 +240,16 @@ class DemoTab:
             "from": [fyear, fmonth, fday],
             "to": [tyear, tmonth, tday],
         }.items():
-            for value in values:
-                value.select(
-                    partial(self._select_time, indicator=key), values, values[-1]
+            for block in values:
+                block.select(
+                    partial(self._update_time, indicator=key),
+                    values,
+                    [plot, values[-1]],
                 )
 
-        button.click(self._predict, None, plot)
+        data_dropdown.select(self._update_data, data_dropdown, [plot, fyear, tyear])
+        model_dropdown.select(self._update_model, model_dropdown, plot)
 
-        data_dropdown.select(self._select_data, data_dropdown, [plot, fyear, tyear])
-        model_dropdown.select(self._select_model, model_dropdown)
-
-        self.parent.load(self._select_data, data_dropdown, [plot, fyear, tyear])
-        self.parent.load(self._select_model, model_dropdown)
+        self.parent.load(
+            self._init, [data_dropdown, model_dropdown], [plot, fyear, tyear]
+        )
