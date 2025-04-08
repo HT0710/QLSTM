@@ -226,20 +226,26 @@ class CustomDataModule(LightningDataModule):
         print("\n".join(output))
 
     def prepare_data(self):
+        # Post-processed features
+        self.features.remove("hour")
+        self.features.extend(["hour_sin", "hour_cos", "rolling_mean"])
+
+        # Check exists
         if self.processed_path.exists():
-            self.features.remove("hour")
-            self.features.extend(["hour_sin", "hour_cos", "rolling_mean"])
             return
 
         # Create a copy of dataframe
         data = self.dataframe.copy()
+
+        # Drop unnamed columns
+        data = data.loc[:, ~data.columns.str.contains("^Unnamed", case=False)]
 
         # Convert 'date' and 'hour' columns to datetime type
         data["date"] = pd.to_datetime(data["date"])
         data["hour"] = pd.to_timedelta(data["hour"], unit="h")
         data["date"] = data["date"] + data["hour"]
         data = data.rename(columns={"date": "datetime"})
-        self.features.remove("hour")
+        data.drop(["year", "hour", "month", "day"], axis=1, inplace=True)
 
         # Sort by date
         data = data.sort_values(by="datetime")
@@ -260,9 +266,7 @@ class CustomDataModule(LightningDataModule):
         data = data.set_index("datetime")
 
         # Drop unnecessary columns
-        x_columns = set(
-            self.features + self.labels + ["hour_sin", "hour_cos", "rolling_mean"]
-        )
+        x_columns = set(self.features + self.labels)
         data = data.loc[:, data.columns.isin(x_columns)]
 
         # Finalize
