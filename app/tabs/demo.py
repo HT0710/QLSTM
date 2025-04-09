@@ -35,15 +35,10 @@ class DemoTab:
                 "init": LSTM(9, 128),
                 "checkpoint": "lightning_logs/LSTM/base/checkpoints/last.ckpt",
             },
-            # "LSTMf": {"init": LSTMf(8, 128), "checkpoint": None},
             "cLSTM": {
                 "init": cLSTM(9, 128),
                 "checkpoint": "lightning_logs/cLSTM/version_0/checkpoints/epoch=14-step=17910.ckpt",
             },
-            # "cLSTMf": {"init": cLSTMf(8, 128), "checkpoint": None},
-            # "QLSTM": {"init": QLSTM(8, 128, 2), "checkpoint": None},
-            # "QLSTMf": {"init": QLSTMf(8, 128, 2), "checkpoint": None},
-            # "cQLSTM": {"init": cQLSTM(8, 128, 2), "checkpoint": None},
             "cQLSTMf": {
                 "init": cQLSTMf(9, 128, 2),
                 "checkpoint": "lightning_logs/cQLSTMf/version_9/checkpoints/last.ckpt",
@@ -192,9 +187,7 @@ class DemoTab:
                 gr.Markdown("### Options")
                 with gr.Row():
                     model_dropdown = gr.Dropdown(
-                        choices=self.models.keys(),
-                        label="Model",
-                        interactive=True,
+                        choices=self.models.keys(), label="Model", interactive=True
                     )
                     data_dropdown = gr.Dropdown(
                         choices=self.dataset, label="Dataset", interactive=True

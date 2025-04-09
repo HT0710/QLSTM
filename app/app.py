@@ -5,6 +5,7 @@ traceback.install()
 
 from tabs.datasets import DatasetsTab
 from tabs.demo import DemoTab
+from tabs.live import LiveTab
 from tabs.models import ModelsTab
 
 
@@ -19,9 +20,9 @@ def main():
     with gr.Blocks(css=css) as demo:
         gr.Markdown("# PV Power Forcasting App")
 
-        with gr.Tabs(selected=1):
+        with gr.Tabs():
             with gr.Tab(label="Live", id=0):
-                gr.Markdown("# Comming Soon")
+                LiveTab(demo)()
 
             with gr.Tab(label="Demo", id=1):
                 DemoTab(demo)()
