@@ -325,9 +325,6 @@ class DatasetsTab:
                                 label="Visualize Mode",
                                 interactive=True,
                             )
-                            index_radio = gr.Radio(
-                                ["On", "Off"], value="On", label="Show index"
-                            )
                             group_dropdown = gr.Dropdown(
                                 [
                                     ("None", "None"),
@@ -338,7 +335,7 @@ class DatasetsTab:
                                 ],
                                 label="Group by",
                                 interactive=True,
-                                scale=1,
+                                scale=2,
                             )
 
                     with gr.Column(scale=1, min_width=0):
@@ -368,10 +365,7 @@ class DatasetsTab:
                             )
 
                 rev_df = gr.Dataframe(
-                    max_height=600,
-                    show_row_numbers=True,
-                    show_fullscreen_button=True,
-                    show_search="search",
+                    max_height=600, show_fullscreen_button=True, show_search="search"
                 )
 
                 with gr.Row(visible=False) as vis:
@@ -401,10 +395,6 @@ class DatasetsTab:
                     [rev_df, vis_radio, features_dropdown],
                     vis_plot,
                     scroll_to_output=True,
-                )
-
-                index_radio.select(
-                    lambda x: gr.update(show_row_numbers=x == "On"), index_radio, rev_df
                 )
 
                 for key, values in {
