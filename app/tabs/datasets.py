@@ -432,7 +432,7 @@ class DatasetsTab:
                     data_dropdown,
                     [rev_df, fyear, fmonth, fday, tyear, tmonth, tday],
                 )
-                self.parent.load(
+                self.parent.select(
                     self._select_data,
                     data_dropdown,
                     [rev_df, fyear, fmonth, fday, tyear, tmonth, tday],

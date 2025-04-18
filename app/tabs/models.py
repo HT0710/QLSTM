@@ -81,4 +81,4 @@ class ModelsTab:
                 data_plt = gr.Plot(show_label=False)
 
         data_dd.select(self._select_data, data_dd, data_plt)
-        self.parent.load(self._select_data, data_dd, data_plt)
+        self.parent.select(self._select_data, data_dd, data_plt)

@@ -29,7 +29,6 @@ class DemoTab:
         self.data_path = self.root / "data"
         self.model_path = self.root / "models"
         self.dataset = sorted([i.name for i in self.data_path.glob("*.csv")])
-        self.datasets = {}
         self.models = {
             "LSTM": {
                 "init": LSTM(9, 128),
@@ -243,6 +242,6 @@ class DemoTab:
         data_dropdown.select(self._update_data, data_dropdown, [plot, fyear, tyear])
         model_dropdown.select(self._update_model, model_dropdown, plot)
 
-        self.parent.load(
+        self.parent.select(
             self._init, [data_dropdown, model_dropdown], [plot, fyear, tyear]
         )
