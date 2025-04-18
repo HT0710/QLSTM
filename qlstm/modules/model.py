@@ -8,10 +8,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from lightning.pytorch import LightningModule
 from lightning.pytorch.utilities import grad_norm
 from rich import print
-from torchmetrics.functional import (
-    mean_absolute_error,
-    mean_squared_error,
-)
+from torchmetrics.functional import mean_absolute_error, mean_squared_error, r2_score
 
 from .utils import device_handler
 
@@ -95,6 +92,7 @@ class LitModel(LightningModule):
                 preds=y_hat, target=y, squared=False, num_outputs=1
             ),
             "mae": mean_absolute_error(preds=y_hat, target=y, num_outputs=1),
+            "r2": r2_score(preds=y_hat, target=y),
         }
         self.log_dict(
             {f"{stage}/{k}": v for k, v in metrics.items()},
