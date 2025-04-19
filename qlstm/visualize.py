@@ -33,6 +33,7 @@ def main(cfg: DictConfig) -> None:
         overlap=True,
         n_future=2,
     )
+    dataset.prepare_data()
     dataset.setup("predict")
 
     # Define model
