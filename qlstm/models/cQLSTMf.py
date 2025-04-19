@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 
-class QLSTM(nn.Module):
+class cQLSTMf(nn.Module):
     def __init__(
         self,
         input_size,
@@ -13,7 +13,7 @@ class QLSTM(nn.Module):
         n_esteps=1,
         backend="default.qubit",
     ):
-        super(QLSTM, self).__init__()
+        super().__init__()
         self.n_inputs = input_size
         self.hidden_size = hidden_size
         self.n_qubits = n_qubits  # qubits of 3 gates are combined

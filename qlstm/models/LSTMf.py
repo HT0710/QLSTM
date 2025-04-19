@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-class LSTMCell(nn.Module):
+class LSTMfCell(nn.Module):
     def __init__(self, input_size, hidden_size):
         super().__init__()
         self.input_size = input_size
@@ -30,14 +30,14 @@ class LSTMCell(nn.Module):
         return h_next, c_next
 
 
-class LSTM(nn.Module):
+class LSTMf(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers=1):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.cells = nn.ModuleList(
             [
-                LSTMCell(input_size if i == 0 else hidden_size, hidden_size)
+                LSTMfCell(input_size if i == 0 else hidden_size, hidden_size)
                 for i in range(num_layers)
             ]
         )
