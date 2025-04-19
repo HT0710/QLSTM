@@ -6,6 +6,9 @@ torch
 lightning
 pennylane
 
+# app
+gradio
+
 # others
 rich
 seaborn
