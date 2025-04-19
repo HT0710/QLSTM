@@ -8,6 +8,7 @@ from tabs.demo import DemoTab
 from tabs.home import HomeTab
 from tabs.live import LiveTab
 from tabs.models import ModelsTab
+from tabs.system import SystemTab
 
 
 def main():
@@ -32,6 +33,9 @@ def main():
 
         with gr.Tab(label="Live") as live_tab:
             LiveTab(live_tab)()
+
+        with gr.Tab(label="System") as system_tab:
+            SystemTab(system_tab)()
 
         with gr.Tab(label="Demo") as demo_tab:
             DemoTab(demo_tab)()
