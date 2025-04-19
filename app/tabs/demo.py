@@ -15,8 +15,8 @@ from matplotlib import pyplot as plt
 matplotlib.use("Agg")
 rootutils.autosetup(".gitignore")
 
-from qlstm.models.cLSTM import LSTM as cLSTM
-from qlstm.models.cQLSTMf import QLSTM as cQLSTMf
+from qlstm.models.cLSTM import cLSTM
+from qlstm.models.cQLSTMf import cQLSTMf
 from qlstm.models.LSTM import LSTM
 from qlstm.modules.data import CustomDataModule
 from qlstm.modules.model import LitModel

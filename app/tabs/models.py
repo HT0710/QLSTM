@@ -9,8 +9,8 @@ from matplotlib import pyplot as plt
 
 rootutils.autosetup(".gitignore")
 
-from qlstm.models.cLSTM import LSTM as cLSTM
-from qlstm.models.cQLSTMf import QLSTM as cQLSTMf
+from qlstm.models.cLSTM import cLSTM
+from qlstm.models.cQLSTMf import cQLSTMf
 from qlstm.models.LSTM import LSTM
 from qlstm.modules.utils import yaml_handler
 
