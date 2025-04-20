@@ -12,7 +12,7 @@ class QLSTMf(nn.Module):
         n_qlayers=1,
         backend="default.qubit",
     ):
-        super(QLSTM, self).__init__()
+        super().__init__()
         self.n_inputs = input_size
         self.hidden_size = hidden_size
         self.n_qubits = n_qubits
