@@ -86,11 +86,11 @@ class cQLSTM(nn.Module):
 
             combined = torch.cat((x_t, h_t), dim=1)
 
-            qubits = self.entry(combined)
+            entry = self.entry(combined)
 
-            # qubits = self.VQC(qubits)
+            qubits = self.VQC(entry)
 
-            gates = self.exit(qubits)
+            gates = self.exit(entry + qubits)
 
             f, i, g, o = gates.chunk(chunks=4, dim=1)
 
