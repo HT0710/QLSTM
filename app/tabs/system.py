@@ -22,13 +22,6 @@ class SystemTab:
 
         uptime = datetime.now() - self.boot_time
 
-        return (
-            str(uptime).split(".")[0],
-            f"{np.mean(list(self.history['cpu'])[-3:]):.1f} %",
-            f"{np.mean(list(self.history['ram'])[-3:]):.1f} %",
-        )
-
-    def _show_graph(self):
         cpu_df = pd.DataFrame(
             {
                 "time": range(len(self.history["cpu"]), 0, -1),
@@ -43,7 +36,13 @@ class SystemTab:
             }
         )
 
-        return cpu_df, ram_df
+        return (
+            str(uptime).split(".")[0],
+            f"{np.mean(list(self.history['cpu'])[-3:]):.1f} %",
+            f"{np.mean(list(self.history['ram'])[-3:]):.1f} %",
+            cpu_df,
+            ram_df,
+        )
 
     def __call__(self):
         gr.Markdown("## Current")
@@ -72,6 +71,4 @@ class SystemTab:
             y_lim=[0, 100],
         )
 
-        gr.Timer(1).tick(self._update, None, [uptime, cpu, ram])
-
-        gr.Timer(10).tick(self._show_graph, None, [cpu_graph, ram_graph])
+        gr.Timer(1).tick(self._update, None, [uptime, cpu, ram, cpu_graph, ram_graph])
