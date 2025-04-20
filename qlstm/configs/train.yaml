@@ -12,7 +12,7 @@ data:
   data_path: qlstm/data/Albany_WA.csv
   features: "5-11"
   labels: [11]
-  batch_size: 1024
+  batch_size: 512
   time_steps: 24
   overlap: true
   n_future: 1
@@ -25,7 +25,7 @@ model:
 
 # Config optimizer
 optimizer:
-  lr: 1e-3
+  lr: 2e-3
 
 # Config scheduler
 scheduler:
@@ -34,13 +34,13 @@ scheduler:
 
 # Config trainer
 trainer:
-  accelerator: auto
-  max_epochs: 20
-  precision: 16-mixed
+  accelerator: gpu
+  max_epochs: 30
+  precision: null
   gradient_clip_val: null
 
 # Config logger
 logger:
   save_dir: ./lightning_logs
-  name: LSTM
+  name: null
   version: null
