@@ -2,6 +2,7 @@ from calendar import monthrange
 from functools import partial
 from pathlib import Path
 from datetime import datetime
+import shutil
 
 import gradio as gr
 import matplotlib.pyplot as plt
@@ -13,16 +14,23 @@ import seaborn as sns
 class DatasetsTab:
     def __init__(self, parent):
         self.parent = parent
-        self.root = Path("./qlstm")
-        self.data_path = self.root / "data"
-        self.datasets = sorted([i.name for i in self.data_path.glob("*.csv")])
+        self.data_path = Path("./qlstm/data")
+        self.datasets = sorted([i for i in self.data_path.glob("*.csv")])
         self.current = {
+            "choice": None,
             "data": None,
             "processed": None,
             "group": "None",
             "from": None,
             "to": None,
         }
+
+    def _upload_data(self, files):
+        for file in files:
+            if not str(file.name).endswith((".csv", ".xlsx")):
+                gr.Error('Only ".csv" or ".xlsx" file are accepted.')
+
+            self.datasets.append(Path(file))
 
     def _show_data(self, df):
         if self.current["group"] != "None":
@@ -39,25 +47,43 @@ class DatasetsTab:
         df = df.loc[self.current["from"] : self.current["to"]]
 
         return gr.update(
-            value=df.round(2).reset_index(), label=f"Number of Rows: {len(df)}"
+            value=df.round(2).reset_index(),
+            label=f"Number of Rows: {len(df)}",
+            column_widths=[
+                f"{1 / (len(df.columns) + 1) * 100}%" for _ in range(len(df.columns))
+            ],
         )
 
-    def _select_data(self, data_name):
-        df = pd.read_csv(str(self.data_path / data_name))
+    def _select_data(self, data_path: str):
+        df = pd.read_csv(data_path)
 
         # Drop unnamed columns
         df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
 
-        # Format datetime
-        df["date"] = pd.to_datetime(df["date"])
-        df["hour"] = pd.to_timedelta(df["hour"], unit="h")
-        df["date"] = df["date"] + df["hour"]
-        df = df.rename(columns={"date": "Datetime"})
-        df.drop(["year", "hour", "month", "day"], axis=1, inplace=True)
+        # Change all columns to lowercase
+        df.columns = [col.lower() for col in df.columns]
+
+        if "datetime" not in df.columns:
+            if "date" in df.columns:
+                df["date"] = pd.to_datetime(df["date"])
+
+                if "hour" in df.columns:
+                    # Combine "date" and "hour" to "datetime"
+                    df["hour"] = pd.to_timedelta(df["hour"], unit="h")
+                    df["date"] = df["date"] + df["hour"]
+                    df.drop(["year", "hour", "month", "day"], axis=1, inplace=True)
+
+                # Rename "date" to "Datetime"
+                df.rename(columns={"date": "datetime"}, inplace=True)
+
+            else:
+                gr.Error('Data must contain "date" or "datetime" column.')
+
+        self.current["choice"] = data_path
 
         # Sort and set "Datetime" as index
-        df = df.sort_values(by="Datetime")
-        df = df.set_index("Datetime")
+        df = df.sort_values(by="datetime")
+        df = df.set_index("datetime")
 
         # Select numerical columns only
         num_cols = df.select_dtypes(include=["number"]).columns
@@ -116,7 +142,7 @@ class DatasetsTab:
                 for h in range(start, end):
                     row = {}
                     for col in df.columns:
-                        if col == "Datetime":
+                        if col == "datetime":
                             row[col] = date + pd.DateOffset(hours=h)
                         else:
                             row[col] = np.nan
@@ -124,8 +150,8 @@ class DatasetsTab:
                 filled_rows.extend(new_rows)
 
             for _, row in df.iterrows():
-                curr_date = row["Datetime"].date()
-                curr_hour = row["Datetime"].hour
+                curr_date = row["datetime"].date()
+                curr_hour = row["datetime"].hour
 
                 if curr_hour < prev_hour:
                     add_rows(prev_date, prev_hour + 1, end + 1)
@@ -147,7 +173,7 @@ class DatasetsTab:
 
             df.interpolate(method="linear", inplace=True)
 
-            self.current["processed"] = df.set_index("Datetime")
+            self.current["processed"] = df.set_index("datetime")
 
         else:
             self.current["processed"] = self.current["data"]
@@ -167,7 +193,7 @@ class DatasetsTab:
 
         if mode == "On":
             y_axis = gr.update(
-                choices=[c for c in df.columns if c != "Datetime"],
+                choices=[c for c in df.columns if c != "datetime"],
                 value=[df.columns[-1]],
             )
 
@@ -187,7 +213,7 @@ class DatasetsTab:
         fig, ax = plt.subplots(figsize=(10, 6), dpi=200)
 
         for feature in y:
-            sns.lineplot(x=pd.to_datetime(df["Datetime"]), y=df[feature], ax=ax)
+            sns.lineplot(x=pd.to_datetime(df["datetime"]), y=df[feature], ax=ax)
 
         fig.subplots_adjust(top=0.95, bottom=0.15)
 
@@ -198,13 +224,13 @@ class DatasetsTab:
 
     def _summary(self, df: pd.DataFrame) -> pd.DataFrame:
         summary = df.describe().T.round(2).reset_index()
-        summary = summary.rename(columns={"index": "Statistic"})
+        summary = summary.rename(columns={"index": "statistic"})
 
         return summary
 
     def _heatmap(self, df):
-        df = df[["Statistic", "mean", "std", "min", "max"]]
-        df = df.set_index("Statistic")
+        df = df[["statistic", "mean", "std", "min", "max"]]
+        df = df.set_index("statistic")
 
         fig, ax = plt.subplots(figsize=(12, 6), dpi=200)
         sns.heatmap(df, annot=True, fmt=".2f", cmap="coolwarm", ax=ax, linewidths=0.5)
@@ -218,15 +244,15 @@ class DatasetsTab:
         return fig
 
     def _boxplot(self, df):
-        df = df[["Statistic", "25%", "50%", "75%"]]
+        df = df[["statistic", "25%", "50%", "75%"]]
 
         df_melted = df.melt(
-            id_vars=["Statistic"], var_name="Percentile", value_name="Value"
+            id_vars=["statistic"], var_name="percentile", value_name="value"
         )
 
         fig, ax = plt.subplots(figsize=(12, 6), dpi=200)
         sns.boxplot(
-            df_melted, x="Statistic", y="Value", ax=ax, hue="Statistic", palette="Set2"
+            df_melted, x="statistic", y="value", ax=ax, hue="statistic", palette="Set2"
         )
 
         fig.subplots_adjust(top=0.85, bottom=0.15)
@@ -238,12 +264,12 @@ class DatasetsTab:
         return fig
 
     def _barplot(self, df):
-        df = df[["Statistic", "mean"]]
+        df = df[["statistic", "mean"]]
 
         fig, ax = plt.subplots(figsize=(12, 6), dpi=200)
 
         sns.barplot(
-            df, x="Statistic", y="mean", ax=ax, hue="Statistic", palette="viridis"
+            df, x="statistic", y="mean", ax=ax, hue="statistic", palette="viridis"
         )
 
         fig.subplots_adjust(top=0.85, bottom=0.15)
@@ -258,7 +284,7 @@ class DatasetsTab:
         df = self.current["processed"]
 
         corr = df.corr().round(2).reset_index()
-        corr = corr.rename(columns={"index": "Features"})
+        corr = corr.rename(columns={"index": "features"})
 
         features = list(df.columns)
 
@@ -270,7 +296,7 @@ class DatasetsTab:
         )
 
     def _corr_heatmap(self, df):
-        df = df.set_index("Features")
+        df = df.set_index("features")
 
         fig, ax = plt.subplots(figsize=(12, 6), dpi=200)
 
@@ -299,19 +325,42 @@ class DatasetsTab:
         return fig
 
     def __call__(self):
-        with gr.Row(equal_height=True):
+        with gr.Row():
             with gr.Column():
                 data_dropdown = gr.Dropdown(
-                    choices=map(str, self.datasets), label="Dataset", interactive=True
+                    choices=[(i.name, str(i)) for i in self.datasets],
+                    label="Select data",
+                    interactive=True,
                 )
+                upload_bt = gr.UploadButton(
+                    label="Upload data",
+                    file_count="multiple",
+                    file_types=[".csv", ".xlsx"],
+                )
+
             with gr.Column():
                 with gr.Row(equal_height=True):
                     fmh_radio = gr.Radio(
-                        ["On", "Off"], value="Off", label="Fill missing hours"
+                        ["On", "Off"],
+                        value="Off",
+                        label="Fill missing hours",
+                        min_width=0,
                     )
                     ma_slider = gr.Slider(
                         minimum=1, maximum=24, label="Moving Average", step=1
                     )
+
+            upload_bt.upload(self._upload_data, upload_bt, upload_bt).success(
+                lambda: [
+                    gr.Success("New data added successfully!"),
+                    gr.update(
+                        choices=sorted([(i.name, str(i)) for i in set(self.datasets)]),
+                        value=self.current["choice"],
+                    ),
+                ],
+                None,
+                [data_dropdown, data_dropdown],
+            )
 
         with gr.Tabs() as tabs:
             with gr.Tab("Review", id=0):
@@ -365,7 +414,10 @@ class DatasetsTab:
                             )
 
                 rev_df = gr.Dataframe(
-                    max_height=600, show_fullscreen_button=True, show_search="search"
+                    max_height=600,
+                    show_fullscreen_button=True,
+                    show_search="search",
+                    interactive=False,
                 )
 
                 with gr.Row(visible=False) as vis:
@@ -384,16 +436,12 @@ class DatasetsTab:
                     [rev_df, vis, vis_plot, features_dropdown],
                     scroll_to_output=True,
                 )
-                features_dropdown.select(
-                    self._vis_plot,
-                    [rev_df, vis_radio, features_dropdown],
-                    vis_plot,
-                    scroll_to_output=True,
-                )
-                rev_df.change(
-                    self._vis_plot,
-                    [rev_df, vis_radio, features_dropdown],
-                    vis_plot,
+
+                gr.on(
+                    triggers=[features_dropdown.select, rev_df.change],
+                    fn=self._vis_plot,
+                    inputs=[rev_df, vis_radio, features_dropdown],
+                    outputs=vis_plot,
                     scroll_to_output=True,
                 )
 
@@ -412,14 +460,12 @@ class DatasetsTab:
                 group_dropdown.select(
                     self._select_group, group_dropdown, rev_df, scroll_to_output=True
                 )
-                ma_slider.release(
-                    lambda: gr.update(selected=0), None, tabs, scroll_to_output=True
-                )
-                fmh_radio.select(
-                    lambda: gr.update(selected=0), None, tabs, scroll_to_output=True
-                )
-                data_dropdown.select(
-                    lambda: gr.update(selected=0), None, tabs, scroll_to_output=True
+                gr.on(
+                    [ma_slider.release, fmh_radio.select, data_dropdown.select],
+                    fn=lambda: gr.update(selected=0),
+                    inputs=None,
+                    outputs=tabs,
+                    scroll_to_output=True,
                 )
                 ma_slider.release(
                     self._moving_average, ma_slider, rev_df, scroll_to_output=True
@@ -427,15 +473,11 @@ class DatasetsTab:
                 fmh_radio.select(
                     self._fill_missing_hours, fmh_radio, rev_df, scroll_to_output=True
                 )
-                data_dropdown.select(
-                    self._select_data,
-                    data_dropdown,
-                    [rev_df, fyear, fmonth, fday, tyear, tmonth, tday],
-                )
-                self.parent.select(
-                    self._select_data,
-                    data_dropdown,
-                    [rev_df, fyear, fmonth, fday, tyear, tmonth, tday],
+                gr.on(
+                    [data_dropdown.select, self.parent.select],
+                    fn=self._select_data,
+                    inputs=data_dropdown,
+                    outputs=[rev_df, fyear, fmonth, fday, tyear, tmonth, tday],
                 )
 
             with gr.Tab("Statistics", id=1) as stat_tab:
@@ -498,16 +540,11 @@ class DatasetsTab:
                     with gr.Column(scale=4):
                         pairwise_plot = gr.Plot(show_label=False)
 
-                x_dropdown.select(
-                    self._corr_pairwise,
-                    [x_dropdown, y_dropdown],
-                    pairwise_plot,
-                    scroll_to_output=True,
-                )
-                y_dropdown.select(
-                    self._corr_pairwise,
-                    [x_dropdown, y_dropdown],
-                    pairwise_plot,
+                gr.on(
+                    [x_dropdown.select, y_dropdown.select],
+                    fn=self._corr_pairwise,
+                    inputs=[x_dropdown, y_dropdown],
+                    outputs=pairwise_plot,
                     scroll_to_output=True,
                 )
 
