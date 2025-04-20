@@ -3,10 +3,11 @@ import torch.nn as nn
 
 
 class cLSTMCell(nn.Module):
-    def __init__(self, input_size, hidden_size):
+    def __init__(self, input_size, hidden_size, decay_rate=0.1):
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
+        self.decay_rate = decay_rate
 
         self.fc = nn.Linear(input_size + hidden_size, 4 * hidden_size)
 
@@ -20,7 +21,7 @@ class cLSTMCell(nn.Module):
         input_gate, forget_gate, cell_gate, output_gate = gates.chunk(4, dim=1)
 
         input_gate = torch.sigmoid(input_gate)
-        forget_gate = torch.sigmoid(forget_gate + c_prev)
+        forget_gate = torch.sigmoid(forget_gate + c_prev) * (1 - self.decay_rate)
         cell_gate = torch.tanh(cell_gate)
         output_gate = torch.sigmoid(output_gate)
 
