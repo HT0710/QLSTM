@@ -9,10 +9,10 @@ num_workers: 0.8
 
 # Config dataset
 data:
-  data_path: qlstm/data/Albany_WA.csv
-  features: "5-11"
-  labels: [11]
-  batch_size: 512
+  data_path: qlstm/data/place_1_new.csv
+  features: "4-10"
+  labels: [4]
+  batch_size: 36
   time_steps: 24
   overlap: true
   n_future: 1

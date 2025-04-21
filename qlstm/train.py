@@ -16,9 +16,9 @@ from rich.prompt import Prompt
 rootutils.autosetup()
 traceback.install()
 
-from models.LSTM import LSTM
+from models.cQLSTM import cQLSTM
 from modules.callback import custom_callbacks
-from modules.data import CustomDataModule
+from modules.data import CDM2
 from modules.model import LitModel
 from modules.scheduler import scheduler_with_warmup
 
@@ -36,13 +36,13 @@ def main(cfg: DictConfig) -> None:
         seed_everything(seed=cfg["set_seed"], workers=True)
 
     # Define dataset
-    dataset = CustomDataModule(**cfg["data"])
+    dataset = CDM2(**cfg["data"])
 
     # Define model
-    model = LSTM(
-        input_size=9,
+    model = cQLSTM(
+        input_size=10,
         hidden_size=128,
-        # n_qubits=2,
+        n_qubits=2,
     )
 
     # Setup loss

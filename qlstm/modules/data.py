@@ -109,7 +109,7 @@ class CustomDataModule(LightningDataModule):
             case ".csv":
                 df = pd.read_csv(path, na_filter=True, skip_blank_lines=True, **kargs)
             case ".xlsx":
-                df = pd.read_excel(path, na_filter=True, skip_blank_lines=True, **kargs)
+                df = pd.read_excel(path, na_filter=True, **kargs)
             case _:
                 raise ValueError("Only csv or xlsx file are supported.")
 
@@ -227,7 +227,6 @@ class CustomDataModule(LightningDataModule):
 
     def prepare_data(self):
         # Post-processed features
-        self.features.remove("hour")
         self.features.extend(["hour_sin", "hour_cos", "rolling_mean"])
 
         # Check exists
@@ -335,3 +334,56 @@ class CustomDataModule(LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(dataset=self.test_set, **self.loader_config)
+
+
+class CDM2(CustomDataModule):
+    def prepare_data(self):
+        # Post-processed features
+        self.features.extend(["hour_sin", "hour_cos", "rolling_mean"])
+
+        # Check exists
+        if self.processed_path.exists():
+            return
+
+        # Create a copy of dataframe
+        data = self.dataframe.copy()
+
+        # Drop unnamed columns
+        data = data.loc[:, ~data.columns.str.contains("^Unnamed", case=False)]
+
+        # Convert to datetime column
+        data["datetime"] = pd.to_datetime(data[["year", "month", "day", "hour"]])
+        data.drop(["year", "month", "day", "hour"], axis=1, inplace=True)
+
+        # Sort by date
+        data = data.sort_values(by="datetime")
+
+        # Fill missing hours
+        data = self._fill_hours(data, start=0, end=23)
+        data.interpolate(method="linear", inplace=True)
+
+        # Cyclical Features Encoding
+        _angle = 2 * np.pi * data["datetime"].dt.hour / 24
+        data["hour_sin"] = np.sin(_angle)
+        data["hour_cos"] = np.cos(_angle)
+
+        # Moving Average
+        data["rolling_mean"] = data[self.labels].rolling(window=6, min_periods=1).mean()
+
+        # Set "datetime" as index
+        data = data.set_index("datetime")
+
+        # Drop unnecessary columns
+        x_columns = set(self.features + self.labels)
+        data = data.loc[:, data.columns.isin(x_columns)]
+
+        # Shift data
+        data.loc[:, "measured power"] = data["measured power"].shift(1)
+        data.loc[:, "measured radiation"] = data["measured radiation"].shift(1)
+        data = data.dropna()
+
+        # Finalize
+        data = data.dropna().round(6)
+
+        # Save new data
+        data.to_csv(str(self.processed_path), index=True)
