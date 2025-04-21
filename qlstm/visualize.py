@@ -12,7 +12,7 @@ from rich import traceback
 rootutils.autosetup()
 traceback.install()
 
-from models.LSTM import LSTM
+from models.cLSTM import cLSTM
 from modules.data import CustomDataModule
 from modules.model import LitModel
 
@@ -26,19 +26,19 @@ def main(cfg: DictConfig) -> None:
 
     # Define dataset
     dataset = CustomDataModule(
-        data_path="qlstm/data/Albany_WA.csv",
-        features="5-11",
-        labels=[11],
+        data_path="qlstm/data/place_1_new.csv",
+        features="4-10",
+        labels=[4],
         time_steps=24,
         overlap=True,
-        n_future=2,
+        n_future=1,
     )
     dataset.prepare_data()
     dataset.setup("predict")
 
     # Define model
-    model = LSTM(
-        input_size=9,
+    model = cLSTM(
+        input_size=10,
         hidden_size=128,
         # n_qubits=2,
     )
@@ -47,12 +47,12 @@ def main(cfg: DictConfig) -> None:
     lit_model = LitModel(
         model=model,
         output_size=dataset.n_future,
-        checkpoint="lightning_logs/LSTM/version_2/checkpoints/last.ckpt",
+        checkpoint="lightning_logs/cLSTM/version_1/checkpoints/epoch=24-step=1500.ckpt",
     ).eval()
 
     # Inference loop
     with torch.inference_mode():
-        X, y = dataset.dataset[:168]
+        X, y = dataset.val_set[:168]
         X, y = X[1:], y[:-1, :1]
 
         out = np.array([lit_model(x.unsqueeze(0)).squeeze(0) for x in X])
