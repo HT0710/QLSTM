@@ -8,6 +8,7 @@ class cQLSTM(nn.Module):
         self,
         input_size,
         hidden_size,
+        decay_rate=0.1,
         n_qubits=4,
         n_qlayers=1,
         n_esteps=1,
@@ -16,6 +17,7 @@ class cQLSTM(nn.Module):
         super().__init__()
         self.n_inputs = input_size
         self.hidden_size = hidden_size
+        self.decay_rate = decay_rate
         self.n_qubits = n_qubits  # qubits of 3 gates are combined
         self.n_qlayers = n_qlayers
         self.n_vrotations = 3  # Number of ratations for Variational layer
@@ -94,7 +96,7 @@ class cQLSTM(nn.Module):
 
             f, i, g, o = gates.chunk(chunks=4, dim=1)
 
-            f_t = torch.sigmoid(f + c_t)
+            f_t = torch.sigmoid(f + c_t) * (1 - self.decay_rate)
             i_t = torch.sigmoid(i)
             g_t = torch.tanh(g)
             o_t = torch.sigmoid(o)
