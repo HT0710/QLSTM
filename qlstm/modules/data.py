@@ -157,7 +157,7 @@ class CustomDataModule(LightningDataModule):
             return value
 
     @staticmethod
-    def _fill_hours(df: pd.DataFrame, start=6, end=18):
+    def _fill_hours(df: pd.DataFrame, key="datetime", value=np.nan, start=0, end=23):
         filled_rows = []
         prev_date = None
         prev_hour = start - 1
@@ -167,16 +167,16 @@ class CustomDataModule(LightningDataModule):
             for h in range(start, end):
                 row = {}
                 for col in df.columns:
-                    if col == "datetime":
+                    if col == key:
                         row[col] = date + pd.DateOffset(hours=h)
                     else:
-                        row[col] = np.nan
+                        row[col] = value
                 new_rows.append(row)
             filled_rows.extend(new_rows)
 
         for _, row in df.iterrows():
-            curr_date = row["datetime"].date()
-            curr_hour = row["datetime"].hour
+            curr_date = row[key].date()
+            curr_hour = row[key].hour
 
             # If current hour < previous hour, a new day started
             if curr_hour < prev_hour:
@@ -242,15 +242,14 @@ class CustomDataModule(LightningDataModule):
         # Convert 'date' and 'hour' columns to datetime type
         data["date"] = pd.to_datetime(data["date"])
         data["hour"] = pd.to_timedelta(data["hour"], unit="h")
-        data["date"] = data["date"] + data["hour"]
-        data = data.rename(columns={"date": "datetime"})
-        data.drop(["year", "hour", "month", "day"], axis=1, inplace=True)
+        data["datetime"] = data["date"] + data["hour"]
+        data.drop(["date", "year", "hour", "month", "day"], axis=1, inplace=True)
 
         # Sort by date
         data = data.sort_values(by="datetime")
 
         # Fill missing hours
-        data = self._fill_hours(data)
+        data = self._fill_hours(data, start=6, end=18)
         data.interpolate(method="linear", inplace=True)
 
         # Cyclical Features Encoding
@@ -269,7 +268,7 @@ class CustomDataModule(LightningDataModule):
         data = data.loc[:, data.columns.isin(x_columns)]
 
         # Finalize
-        data = data.dropna().round(4)
+        data = data.dropna().round(6)
 
         # Save new data
         data.to_csv(str(self.processed_path), index=True)
@@ -282,6 +281,8 @@ class CustomDataModule(LightningDataModule):
             # Limit data
             if self.data_limit:
                 data = self._limit_data(data)
+
+            self.index = pd.to_datetime(data["datetime"])
 
             # Create inputs and labels
             inputs = data[self.features].copy()
@@ -381,6 +382,207 @@ class CDM2(CustomDataModule):
         data.loc[:, "measured power"] = data["measured power"].shift(1)
         data.loc[:, "measured radiation"] = data["measured radiation"].shift(1)
         data = data.dropna()
+
+        # Finalize
+        data = data.dropna().round(6)
+
+        # Save new data
+        data.to_csv(str(self.processed_path), index=True)
+
+
+class CDM_Hour(CustomDataModule):
+    @staticmethod
+    def _check_data(path: Path) -> Path:
+        if len(path.suffixes) > 1 and path.suffixes[-2] == ".h":
+            return path
+
+        save_folder = path.parent / "trainable"
+        save_folder.mkdir(parents=True, exist_ok=True)
+
+        return save_folder / f"{path.stem}.h{path.suffix}"
+
+    def prepare_data(self):
+        # Post-processed features
+        self.features.extend(["hour_sin", "hour_cos", "rolling_mean"])
+
+        # Check exists
+        if self.processed_path.exists():
+            return
+
+        # Create a copy of dataframe
+        data = self.dataframe.copy()
+
+        # Drop unnamed columns
+        data = data.loc[:, ~data.columns.str.contains("^Unnamed", case=False)]
+
+        # Convert 'date' and 'hour' columns to datetime type
+        data["date"] = pd.to_datetime(data["date"])
+        data["hour"] = pd.to_timedelta(data["hour"], unit="h")
+        data["datetime"] = data["date"] + data["hour"]
+        data.drop(["date", "year", "hour", "month", "day"], axis=1, inplace=True)
+
+        # Sort by date
+        data = data.sort_values(by="datetime")
+
+        # Fill missing hours
+        data = self._fill_hours(data, start=6, end=18)
+        data.interpolate(method="linear", inplace=True)
+
+        # Cyclical Features Encoding
+        _angle = 2 * np.pi * data["datetime"].dt.hour / 24
+        data["hour_sin"] = np.sin(_angle)
+        data["hour_cos"] = np.cos(_angle)
+
+        # Moving Average
+        data["rolling_mean"] = data[self.labels].rolling(window=6, min_periods=1).mean()
+
+        # Fill night hours
+        data = self._fill_hours(data, value=0)
+
+        # Set "datetime" as index
+        data = data.set_index("datetime")
+
+        # Drop unnecessary columns
+        x_columns = set(self.features + self.labels)
+        data = data.loc[:, data.columns.isin(x_columns)]
+
+        # Finalize
+        data = data.dropna().round(6)
+
+        # Save new data
+        data.to_csv(str(self.processed_path), index=True)
+
+
+class CDM_Day(CustomDataModule):
+    @staticmethod
+    def _check_data(path: Path) -> Path:
+        if len(path.suffixes) > 1 and path.suffixes[-2] == ".d":
+            return path
+
+        save_folder = path.parent / "trainable"
+        save_folder.mkdir(parents=True, exist_ok=True)
+
+        return save_folder / f"{path.stem}.d{path.suffix}"
+
+    def prepare_data(self):
+        # Post-processed features
+        self.features.extend(["day_sin", "day_cos", "rolling_mean"])
+
+        # Check exists
+        if self.processed_path.exists():
+            return
+
+        # Create a copy of dataframe
+        data = self.dataframe.copy()
+
+        # Drop unnamed columns
+        data = data.loc[:, ~data.columns.str.contains("^Unnamed", case=False)]
+
+        # Convert 'date' and 'hour' columns to datetime type
+        data["date"] = pd.to_datetime(data["date"])
+        data["hour"] = pd.to_timedelta(data["hour"], unit="h")
+        data["datetime"] = data["date"] + data["hour"]
+        data.drop(["date", "year", "hour", "month", "day"], axis=1, inplace=True)
+
+        # Sort by date
+        data = data.sort_values(by="datetime")
+
+        # Fill missing hours
+        data = self._fill_hours(data, start=6, end=18)
+        data.interpolate(method="linear", inplace=True)
+
+        # Set "datetime" as index
+        data = data.set_index("datetime")
+
+        # Group index to month
+        data = data.resample("D").sum()
+        data.index = data.index.to_period("D")
+
+        # Cyclical Features Encoding
+        _angle = 2 * np.pi * data.index.weekday / 7
+        data["day_sin"] = np.sin(_angle)
+        data["day_cos"] = np.cos(_angle)
+
+        # Moving Average
+        data["rolling_mean"] = data[self.labels].rolling(window=3, min_periods=1).mean()
+
+        # Drop unnecessary columns
+        x_columns = set(self.features + self.labels)
+        data = data.loc[:, data.columns.isin(x_columns)]
+
+        # Finalize
+        data = data.dropna().round(6)
+
+        # Save new data
+        data.to_csv(str(self.processed_path), index=True)
+
+
+class CDM_Month(CustomDataModule):
+    @staticmethod
+    def _check_data(path: Path) -> Path:
+        if len(path.suffixes) > 1 and path.suffixes[-2] == ".m":
+            return path
+
+        save_folder = path.parent / "trainable"
+        save_folder.mkdir(parents=True, exist_ok=True)
+
+        return save_folder / f"{path.stem}.m{path.suffix}"
+
+    @staticmethod
+    def _check_data(path: Path) -> Path:
+        if len(path.suffixes) > 1 and path.suffixes[-2] == ".x":
+            return path
+
+        save_folder = path.parent / "trainable"
+        save_folder.mkdir(parents=True, exist_ok=True)
+
+        return save_folder / f"{path.stem}.m{path.suffix}"
+
+    def prepare_data(self):
+        # Post-processed features
+        self.features.extend(["month_sin", "month_cos", "rolling_mean"])
+
+        # Check exists
+        if self.processed_path.exists():
+            return
+
+        # Create a copy of dataframe
+        data = self.dataframe.copy()
+
+        # Drop unnamed columns
+        data = data.loc[:, ~data.columns.str.contains("^Unnamed", case=False)]
+
+        # Convert 'date' and 'hour' columns to datetime type
+        data["date"] = pd.to_datetime(data["date"])
+        data["hour"] = pd.to_timedelta(data["hour"], unit="h")
+        data["datetime"] = data["date"] + data["hour"]
+        data.drop(["date", "year", "hour", "month", "day"], axis=1, inplace=True)
+
+        # Sort by date
+        data = data.sort_values(by="datetime")
+
+        # Fill missing hours
+        data = self._fill_hours(data, start=6, end=18)
+        data.interpolate(method="linear", inplace=True)
+
+        # Set "datetime" as index
+        data = data.set_index("datetime")
+
+        # Group index to month
+        data = data.resample("ME").sum()
+        data.index = data.index.to_period("M")
+
+        # Cyclical Features Encoding
+        _angle = 2 * np.pi * data.index.month / 12
+        data["month_sin"] = np.sin(_angle)
+        data["month_cos"] = np.cos(_angle)
+
+        # Moving Average
+        data["rolling_mean"] = data[self.labels].rolling(window=4, min_periods=1).mean()
+
+        # Drop unnecessary columns
+        x_columns = set(self.features + self.labels)
+        data = data.loc[:, data.columns.isin(x_columns)]
 
         # Finalize
         data = data.dropna().round(6)
