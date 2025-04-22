@@ -28,23 +28,31 @@ def main():
     with gr.Blocks(css=css) as app:
         gr.Markdown("# PV Power Forcasting App")
 
-        with gr.Tab(label="Home", elem_classes="home-tab"):
-            HomeTab(app)()
+        with gr.Tab("User"):
+            with gr.Tab(label="Home", elem_classes="home-tab"):
+                HomeTab(app)()
 
-        with gr.Tab(label="Live") as live_tab:
-            LiveTab(live_tab)()
+            with gr.Tab(label="Live") as live_tab:
+                LiveTab(live_tab)()
 
-        with gr.Tab(label="System") as system_tab:
-            SystemTab(system_tab)()
+            with gr.Tab(label="Estimate") as estimate_tab:
+                pass
 
-        with gr.Tab(label="Demo") as demo_tab:
-            DemoTab(demo_tab)()
+            with gr.Tab(label="History") as history_tab:
+                pass
 
-        with gr.Tab(label="Datasets") as datasets_tab:
-            DatasetsTab(datasets_tab)()
+        with gr.Tab("Developer"):
+            with gr.Tab(label="Demo") as demo_tab:
+                DemoTab(demo_tab)()
 
-        with gr.Tab(label="Models") as models_tab:
-            ModelsTab(models_tab)()
+            with gr.Tab(label="Datasets") as datasets_tab:
+                DatasetsTab(datasets_tab)()
+
+            with gr.Tab(label="Models") as models_tab:
+                ModelsTab(models_tab)()
+
+            with gr.Tab(label="System") as system_tab:
+                SystemTab(system_tab)()
 
     app.launch()
 
