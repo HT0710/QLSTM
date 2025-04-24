@@ -12,18 +12,15 @@ matplotlib.use("Agg")
 rootutils.autosetup(".gitignore")
 
 from qlstm.models.cLSTM import cLSTM
-from qlstm.models.cQLSTMf import cQLSTMf
+from qlstm.models.cQLSTM import cQLSTM
 from qlstm.models.LSTM import LSTM
-from qlstm.modules.data import CustomDataModule
+from qlstm.modules.data import CDM_Hour, CDM_Day, CDM_Month
 from qlstm.modules.model import LitModel
 
 
 class LiveTab:
     def __init__(self, parent):
         self.parent = parent
-        self.root = Path("./qlstm")
-        self.data_path = self.root / "data"
-        self.model_path = self.root / "models"
         self.models = {
             "LSTM": {
                 "init": LSTM(9, 128),
@@ -31,19 +28,61 @@ class LiveTab:
             },
             "cLSTM": {
                 "init": cLSTM(9, 128),
-                "checkpoint": "lightning_logs/cLSTM/version_0/checkpoints/epoch=14-step=17910.ckpt",
+                "checkpoint": "lightning_logs/cLSTM/base/checkpoints/last.ckpt",
             },
-            "cQLSTMf": {
-                "init": cQLSTMf(9, 128, 2),
-                "checkpoint": "lightning_logs/cQLSTMf/version_9/checkpoints/last.ckpt",
+            "cQLSTM": {
+                "init": cQLSTM(9, 128, n_qubits=2),
+                "checkpoint": "lightning_logs/cQLSTM/2q_post_2/checkpoints/last.ckpt",
             },
         }
-        self.current = {}
+        self.current = {"i": 0, "data": None, "model": None, "group": "hour"}
+
+    def _select_group(self, group):
+        self.current["group"] = group
+
+        match group:
+            case "hour":
+                data = CDM_Hour(
+                    data_path="qlstm/data/Albany_WA.csv",
+                    features="6-11",
+                    labels=[11],
+                    time_steps=24,
+                    overlap=True,
+                )
+
+            case "day":
+                data = CDM_Day(
+                    data_path="qlstm/data/Albany_WA.csv",
+                    features="6-11",
+                    labels=[11],
+                    time_steps=7,
+                    overlap=True,
+                )
+
+            case "month":
+                data = CDM_Month(
+                    data_path="qlstm/data/Albany_WA.csv",
+                    features="6-11",
+                    labels=[11],
+                    time_steps=4,
+                    overlap=True,
+                )
+
+        data.prepare_data()
+        data.setup("predict")
+
+        df = pd.DataFrame(
+            [{"datetime": t, "batch": b} for t, b in zip(data.index, data.dataset)]
+        )
+
+        self.current["data"] = df.set_index("datetime")
+
+        self.current["decoder"] = data.encoder["label"].inverse_transform
 
     def _select_model(self, model_name):
         model = self.models[model_name]
         self.current["model"] = LitModel(
-            model["init"], checkpoint=model["checkpoint"]
+            model["init"], checkpoint=model["checkpoint"], device="cpu"
         ).eval()
 
     def _predict(self):
@@ -51,7 +90,7 @@ class LiveTab:
 
         fig, ax = plt.subplots(figsize=(16, 5), dpi=200)
 
-        subset = self.current["data"][:100].reset_index()
+        subset = self.current["data"][self.current["i"] : self.current["i"] + 23]
 
         if subset.empty:
             return fig
@@ -61,65 +100,41 @@ class LiveTab:
 
         with torch.inference_mode():
             for X, y in subset["batch"]:
-                outs.append(self.current["model"](X.unsqueeze(0)).squeeze(-1))
+                y = self.current["decoder"]([y])
+
+                if y <= 1:
+                    out = y
+                else:
+                    out = self.current["decoder"](self.current["model"](X.unsqueeze(0)))
+
+                outs.append(max(np.zeros((1, 1)), out))
                 labels.append(y)
 
-        # Denormalize
-        outs = self.current["decoder"](np.array(outs))
-        labels = self.current["decoder"](np.array(labels))
+        outs = np.array(outs)
+        labels = np.array(labels)
 
-        times = []
-        outs_tilda = []
-        labels_tilda = []
-
-        for i in range(len(subset["datetime"])):
-            if i == 0:
-                times.append(subset["datetime"][i])
-                outs_tilda.append(outs[i])
-                labels_tilda.append(labels[i])
-                continue
-
-            delta = subset["datetime"][i] - subset["datetime"][i - 1]
-
-            for j in range(1, delta.components.hours):
-                times.append(subset["datetime"][i - 1] + pd.Timedelta(hours=j))
-                outs_tilda.append(torch.zeros(1))
-                labels_tilda.append(torch.zeros(1))
-
-            times.append(subset["datetime"][i])
-            outs_tilda.append(outs[i])
-            labels_tilda.append(labels[i])
-
-        times, outs_tilda, labels_tilda = map(
-            np.array, [times, outs_tilda, labels_tilda]
-        )
-
-        data = pd.DataFrame(
-            {"Actual": labels_tilda.ravel(), "Predicted": outs_tilda.ravel()}
-        )
+        data = pd.DataFrame({"Actual": labels.ravel(), "Forecasted": outs.ravel()})
 
         actual = pd.DataFrame({"Value": data["Actual"], "Label": "Actual"})
-        predicted = pd.DataFrame({"Value": data["Predicted"], "Label": "Predicted"})
+        predicted = pd.DataFrame({"Value": data["Forecasted"], "Label": "Forecasted"})
 
-        data = pd.concat([actual[:50], predicted[50:100]], ignore_index=True)
-        data["Time"] = times[:100]
-        data["Time"] = data["Time"].dt.tz_localize("Asia/Bangkok")
+        data = pd.concat([actual[:12], predicted[12:23]], ignore_index=True)
 
-        join = data[49:50].copy()
-        join["Label"] = "Predicted"
+        data["Time"] = subset.index[:23].tz_localize("Asia/Ho_Chi_Minh")
 
-        data = pd.concat([data[:50], join, data[50:100]], ignore_index=True)
+        self.current["join"] = join = data[11:12].copy()
+        join["Label"] = "Forecasted"
 
-        fig = gr.LinePlot(data, x="Time", y="Value", color="Label")
+        data = pd.concat([data[:12], join, data[12:23]], ignore_index=True)
 
-        # for k, v in [("Actual", labels_tilda), ("Predicted", outs_tilda)]:
-        #     sns.lineplot(x=times, y=v.ravel(), ax=ax, label=k)
-
-        # fig.subplots_adjust(left=0.1, right=0.95, top=0.85, bottom=0.15)
-
-        # ax.set_title("PV Power Output", fontsize=16, fontweight="bold", pad=14)
-        # ax.set_xlabel("Time", fontsize=14, fontweight="bold", labelpad=14)
-        # ax.set_ylabel("Power (kW)", fontsize=14, fontweight="bold", labelpad=14)
+        fig = gr.LinePlot(
+            data,
+            x="Time",
+            y="Value",
+            x_title=f"Time ({self.current['group']})",
+            y_title="Energy (kWh)",
+            color="Label",
+        )
 
         return fig
 
@@ -130,9 +145,9 @@ class LiveTab:
         return plot
 
     def _init(self, model_name):
-        data = CustomDataModule(
+        data = CDM_Hour(
             data_path="qlstm/data/Albany_WA.csv",
-            features="5-11",
+            features="6-11",
             labels=[11],
             time_steps=24,
             overlap=True,
@@ -140,58 +155,66 @@ class LiveTab:
         data.prepare_data()
         data.setup("predict")
 
-        datetime = pd.read_csv(
-            data.processed_path, parse_dates=["datetime"], index_col="datetime"
-        ).index
+        df = pd.DataFrame(
+            [{"datetime": t, "batch": b} for t, b in zip(data.index, data.dataset)]
+        )
 
-        self.current["data"] = pd.DataFrame(
-            [{"datetime": t, "batch": b} for t, b in zip(datetime, data.dataset)]
-        ).set_index("datetime")
+        self.current["data"] = df.set_index("datetime")
 
         self.current["decoder"] = data.encoder["label"].inverse_transform
 
         self._select_model(model_name)
-        plot = self._predict()
 
-        return plot
+        return self._predict(), gr.update(active=True)
+
+    def _plus(self):
+        self.current["i"] += 1
+
+        match self.current["group"]:
+            case "hour":
+                time_format = "%H:%M - %a, %d %b %Y"
+
+            case "day":
+                time_format = "%A, %d %b %Y"
+
+            case "month":
+                time_format = "%B %Y"
+
+        return (
+            self._predict(),
+            f"{self.current['join']['Time'].dt.strftime(time_format).values[0]}",
+            f"{round(self.current['join']['Value'].values[0]):,} kWh",
+        )
 
     def __call__(self):
+        gr.Markdown("### Current")
         with gr.Row():
-            with gr.Column(scale=2):
-                with gr.Row():
-                    model_dd = gr.Dropdown(
-                        choices=self.models.keys(), label="Model", interactive=True
-                    )
-                    version_dd = gr.Dropdown(
-                        ["1", "2"], label="Version", interactive=True
-                    )
-
-            # with gr.Column(scale=1):
-            #     gr.DateTime(label="From")
-            #     gr.DateTime(label="From")
+            time_lb = gr.Label(label="Time")
+            power_lb = gr.Label(label="Energy", scale=2)
 
         gr.Markdown("### PV power")
+        plot = gr.LinePlot(show_label=False)
+
         with gr.Row():
             group_dd = gr.Dropdown(
                 [
-                    ("Hour", "None"),
-                    ("Day", "D"),
-                    ("Week", "W"),
-                    ("Month", "ME"),
-                    ("Year", "YE"),
+                    ("Hour", "hour"),
+                    ("Day", "day"),
+                    ("Month", "month"),
                 ],
                 label="Group by",
                 interactive=True,
             )
-            forecast_dd = gr.Slider(
-                minimum=0,
-                maximum=6,
-                step=1,
-                label="Forecasting",
-                interactive=True,
+            model_dd = gr.Dropdown(
+                choices=self.models.keys(), label="Model", interactive=True
             )
 
-        plot = gr.LinePlot(show_label=False)
-
         model_dd.select(self._update_model, model_dd, plot)
-        self.parent.select(self._init, model_dd, plot)
+
+        group_dd.select(self._select_group, group_dd, None)
+
+        time = gr.Timer(1, active=False)
+
+        time.tick(self._plus, None, [plot, time_lb, power_lb])
+
+        self.parent.select(self._init, model_dd, [plot, time])
