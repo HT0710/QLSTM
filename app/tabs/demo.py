@@ -11,13 +11,15 @@ import rootutils
 import seaborn as sns
 import torch
 from matplotlib import pyplot as plt
+from torchmetrics.functional import mean_absolute_error, mean_squared_error, r2_score
 
 matplotlib.use("Agg")
 rootutils.autosetup(".gitignore")
 
 from qlstm.models.cLSTM import cLSTM
-from qlstm.models.cQLSTMf import cQLSTMf
+from qlstm.models.cQLSTM import cQLSTM
 from qlstm.models.LSTM import LSTM
+from qlstm.models.QLSTM import QLSTM
 from qlstm.modules.data import CustomDataModule
 from qlstm.modules.model import LitModel
 
@@ -36,11 +38,23 @@ class DemoTab:
             },
             "cLSTM": {
                 "init": cLSTM(9, 128),
-                "checkpoint": "lightning_logs/cLSTM/version_0/checkpoints/epoch=14-step=17910.ckpt",
+                "checkpoint": "lightning_logs/cLSTM/base/checkpoints/last.ckpt",
             },
-            "cQLSTMf": {
-                "init": cQLSTMf(9, 128, 2),
-                "checkpoint": "lightning_logs/cQLSTMf/version_9/checkpoints/last.ckpt",
+            "QLSTM_2q": {
+                "init": QLSTM(9, 128, n_qubits=2),
+                "checkpoint": "lightning_logs/QLSTM/2q/checkpoints/last.ckpt",
+            },
+            "QLSTM_4q": {
+                "init": QLSTM(9, 128, n_qubits=4),
+                "checkpoint": "lightning_logs/QLSTM/4q/checkpoints/last.ckpt",
+            },
+            "cQLSTM_2q": {
+                "init": cQLSTM(9, 128, n_qubits=2),
+                "checkpoint": "lightning_logs/cQLSTM/2q_post_2/checkpoints/last.ckpt",
+            },
+            "cQLSTM_4q": {
+                "init": cQLSTM(9, 128, n_qubits=4),
+                "checkpoint": "lightning_logs/cQLSTM/4q_post_2/checkpoints/last.ckpt",
             },
         }
         self.current = {
@@ -52,7 +66,7 @@ class DemoTab:
     def _select_data(self, data_name):
         data = CustomDataModule(
             data_path=str(self.data_path / data_name),
-            features="5-11",
+            features="6-11",
             labels=[11],
             time_steps=24,
             overlap=True,
@@ -83,7 +97,7 @@ class DemoTab:
     def _select_model(self, model_name):
         model = self.models[model_name]
         self.current["model"] = LitModel(
-            model["init"], checkpoint=model["checkpoint"]
+            model["init"], checkpoint=model["checkpoint"], device="cpu"
         ).eval()
 
     def _select_time(self, y, m, d, indicator):
@@ -115,8 +129,18 @@ class DemoTab:
                 labels.append(y)
 
         # Denormalize
-        outs = self.current["decoder"](np.array(outs))
-        labels = self.current["decoder"](np.array(labels))
+        outs = torch.tensor(self.current["decoder"](np.array(outs)))
+        labels = torch.tensor(self.current["decoder"](np.array(labels)))
+
+        self.current["metrics"] = {
+            "R2": f"{r2_score(outs, labels):.2f} %",
+            "MAE": f"{mean_absolute_error(outs, labels):.2f} kWh",
+            "RMSE": f"{mean_squared_error(outs, labels, squared=False):.2f} kWh",
+        }
+
+        # Denormalize
+        outs = outs.numpy()
+        labels = labels.numpy()
 
         times = []
         outs_tilda = []
@@ -226,7 +250,17 @@ class DemoTab:
 
         gr.Markdown("### Result")
         with gr.Row():
-            plot = gr.Plot(show_label=False)
+            r2_lb = gr.Label(label="R²")
+            mae_lb = gr.Label(label="MAE")
+            rmse_lb = gr.Label(label="RMSE")
+
+        plot = gr.Plot(show_label=False)
+
+        plot.change(
+            lambda: [i for i in self.current["metrics"].values()],
+            None,
+            [r2_lb, mae_lb, rmse_lb],
+        )
 
         for key, values in {
             "from": [fyear, fmonth, fday],
