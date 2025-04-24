@@ -84,7 +84,7 @@ def main(cfg: DictConfig) -> None:
 
     plt.figure(figsize=(16, 9))
 
-    X, y = dataset.val_set[:168]
+    X, y = dataset.val_set[86 : 86 + 23]
     # X, y = X[1:], y[:-1, :1]
 
     y = dataset.encoder["label"].inverse_transform(y)
@@ -103,7 +103,7 @@ def main(cfg: DictConfig) -> None:
 
         out = dataset.encoder["label"].inverse_transform(out)
 
-        plt.plot(range(len(out)), out, label="M-LSTM", linewidth=3)
+        plt.plot(range(len(out)), out, label="mLSTM", linewidth=3)
 
         out = np.array(lit_model3(X))
 
@@ -115,7 +115,7 @@ def main(cfg: DictConfig) -> None:
 
         out = dataset.encoder["label"].inverse_transform(out)
 
-        plt.plot(range(len(out)), out, label="M-QLSTM", linewidth=3)
+        plt.plot(range(len(out)), out, label="mQLSTM", linewidth=3)
 
     # plt.title("Modified QLSTM", fontsize=24, pad=15)
     plt.xlabel("Time (hour)", fontsize=20)
@@ -127,9 +127,9 @@ def main(cfg: DictConfig) -> None:
     plt.tight_layout()
 
     # Show the plot
-    plt.show()
+    # plt.show()
 
-    # plt.savefig("./cQLSTMf.png", dpi=300, bbox_inches="tight")
+    plt.savefig("./first_4model.png", dpi=200, bbox_inches="tight")
 
 
 if __name__ == "__main__":
