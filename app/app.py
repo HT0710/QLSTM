@@ -42,6 +42,9 @@ def main():
                 pass
 
         with gr.Tab("Developer"):
+            with gr.Tab(label="Home", elem_classes="home-tab"):
+                HomeTab(app)()
+
             with gr.Tab(label="Demo") as demo_tab:
                 DemoTab(demo_tab)()
 
