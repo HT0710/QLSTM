@@ -32,13 +32,15 @@ class cLSTMCell(nn.Module):
 
 
 class cLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers=1):
+    def __init__(self, input_size, hidden_size, num_layers=1, decay_rate=0.1):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.cells = nn.ModuleList(
             [
-                cLSTMCell(input_size if i == 0 else hidden_size, hidden_size)
+                cLSTMCell(
+                    input_size if i == 0 else hidden_size, hidden_size, decay_rate
+                )
                 for i in range(num_layers)
             ]
         )
