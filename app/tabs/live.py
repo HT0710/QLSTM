@@ -1,12 +1,9 @@
-from pathlib import Path
-
 import gradio as gr
 import matplotlib
 import numpy as np
 import pandas as pd
 import rootutils
 import torch
-from matplotlib import pyplot as plt
 
 matplotlib.use("Agg")
 rootutils.autosetup(".gitignore")
@@ -86,37 +83,32 @@ class LiveTab:
         ).eval()
 
     def _predict(self):
-        plt.close()
-
-        fig, ax = plt.subplots(figsize=(16, 5), dpi=200)
-
         subset = self.current["data"][self.current["i"] : self.current["i"] + 23]
-
-        if subset.empty:
-            return fig
 
         outs = []
         labels = []
 
+        for X, y in subset["batch"]:
+            outs.append(X)
+
+            y = self.current["decoder"]([y])
+
+            labels.append(y)
+
+        X = torch.stack(outs)
+
         with torch.inference_mode():
-            for X, y in subset["batch"]:
-                y = self.current["decoder"]([y])
+            outs = self.current["decoder"](self.current["model"](X).detach())
 
-                if y <= 1:
-                    out = y
-                else:
-                    out = self.current["decoder"](self.current["model"](X.unsqueeze(0)))
+        outs = np.clip(outs, a_min=0, a_max=None).astype(int).ravel()
+        labels = np.array(labels).astype(int).ravel()
 
-                outs.append(max(np.zeros((1, 1)), out))
-                labels.append(y)
+        for i, label in enumerate(labels):
+            if label == 0:
+                outs[i] = 0
 
-        outs = np.array(outs)
-        labels = np.array(labels)
-
-        data = pd.DataFrame({"Actual": labels.ravel(), "Forecasted": outs.ravel()})
-
-        actual = pd.DataFrame({"Value": data["Actual"], "Label": "Actual"})
-        predicted = pd.DataFrame({"Value": data["Forecasted"], "Label": "Forecasted"})
+        actual = pd.DataFrame({"Value": labels, "Label": "Actual"})
+        predicted = pd.DataFrame({"Value": outs, "Label": "Forecasted"})
 
         data = pd.concat([actual[:12], predicted[12:23]], ignore_index=True)
 
@@ -136,6 +128,14 @@ class LiveTab:
             color="Label",
         )
 
+        passed = self.df.iloc[self.current["i"]]
+
+        time = str(passed.iloc[0])
+        values = map(lambda x: str(round(x, 2)), passed.iloc[1:].tolist())
+
+        with open("app/history.csv", "+a") as f:
+            f.write(time + "," + ",".join(values) + "\n")
+
         return fig
 
     def _update_model(self, model_name):
@@ -145,25 +145,51 @@ class LiveTab:
         return plot
 
     def _init(self, model_name):
-        data = CDM_Hour(
-            data_path="qlstm/data/Albany_WA.csv",
-            features="6-11",
-            labels=[11],
-            time_steps=24,
-            overlap=True,
-        )
-        data.prepare_data()
-        data.setup("predict")
+        if self.current["i"] == 0:
+            data = CDM_Hour(
+                data_path="qlstm/data/Albany_WA.csv",
+                features="6-11",
+                labels=[11],
+                time_steps=24,
+                overlap=True,
+            )
+            data.prepare_data()
+            data.setup("predict")
 
-        df = pd.DataFrame(
-            [{"datetime": t, "batch": b} for t, b in zip(data.index, data.dataset)]
-        )
+            df = data.dataframe.copy()
 
-        self.current["data"] = df.set_index("datetime")
+            # Drop unnamed columns
+            df = df.loc[:, ~df.columns.str.contains("^Unnamed", case=False)]
 
-        self.current["decoder"] = data.encoder["label"].inverse_transform
+            # Convert 'date' and 'hour' columns to datetime type
+            df["date"] = pd.to_datetime(df["date"])
+            df["hour"] = pd.to_timedelta(df["hour"], unit="h")
+            df["date"] = df["date"] + df["hour"]
+            df = df.rename(columns={"date": "datetime"})
+            df.drop(["year", "hour", "month", "day"], axis=1, inplace=True)
 
-        self._select_model(model_name)
+            df = df.sort_values(by="datetime")
+
+            # Fill missing hours
+            df = data._fill_hours(df, start=6, end=18)
+            df.interpolate(method="linear", inplace=True)
+            df = data._fill_hours(df, value=0)
+
+            self.df = df
+
+            with open("app/history.csv", "+w") as f:
+                f.write(",".join(df.columns) + "\n")
+
+            df = pd.DataFrame(
+                [{"datetime": t, "batch": b} for t, b in zip(data.index, data.dataset)]
+            )
+
+            self.current["data"] = df.set_index("datetime")
+
+            self.current["encoder"] = data.encoder["input"].inverse_transform
+            self.current["decoder"] = data.encoder["label"].inverse_transform
+
+            self._select_model(model_name)
 
         return self._predict(), gr.update(active=True)
 
