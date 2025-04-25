@@ -5,6 +5,8 @@ traceback.install()
 
 from tabs.datasets import DatasetsTab
 from tabs.demo import DemoTab
+from tabs.estimate import EstimateTab
+from tabs.history import HistoryTab
 from tabs.home import HomeTab
 from tabs.live import LiveTab
 from tabs.models import ModelsTab
@@ -35,11 +37,11 @@ def main():
             with gr.Tab(label="Live") as live_tab:
                 LiveTab(live_tab)()
 
-            with gr.Tab(label="Estimate") as estimate_tab:
-                pass
-
             with gr.Tab(label="History") as history_tab:
-                pass
+                HistoryTab(history_tab)()
+
+            with gr.Tab(label="Estimate") as estimate_tab:
+                EstimateTab(estimate_tab)()
 
         with gr.Tab("Developer"):
             with gr.Tab(label="Home", elem_classes="home-tab"):
