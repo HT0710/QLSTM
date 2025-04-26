@@ -16,10 +16,7 @@ from torchmetrics.functional import mean_absolute_error, mean_squared_error, r2_
 matplotlib.use("Agg")
 rootutils.autosetup(".gitignore")
 
-from qlstm.models.cLSTM import cLSTM
-from qlstm.models.cQLSTM import cQLSTM
-from qlstm.models.LSTM import LSTM
-from qlstm.models.QLSTM import QLSTM
+from common.models import MODELS
 from qlstm.modules.data import CustomDataModule
 from qlstm.modules.model import LitModel
 
@@ -31,32 +28,7 @@ class DemoTab:
         self.data_path = self.root / "data"
         self.model_path = self.root / "models"
         self.dataset = sorted([i.name for i in self.data_path.glob("*.csv")])
-        self.models = {
-            "LSTM": {
-                "init": LSTM(9, 128),
-                "checkpoint": "lightning_logs/LSTM/base/checkpoints/last.ckpt",
-            },
-            "cLSTM": {
-                "init": cLSTM(9, 128),
-                "checkpoint": "lightning_logs/cLSTM/base/checkpoints/last.ckpt",
-            },
-            "QLSTM_2q": {
-                "init": QLSTM(9, 128, n_qubits=2),
-                "checkpoint": "lightning_logs/QLSTM/2q/checkpoints/last.ckpt",
-            },
-            "QLSTM_4q": {
-                "init": QLSTM(9, 128, n_qubits=4),
-                "checkpoint": "lightning_logs/QLSTM/4q/checkpoints/last.ckpt",
-            },
-            "cQLSTM_2q": {
-                "init": cQLSTM(9, 128, n_qubits=2),
-                "checkpoint": "lightning_logs/cQLSTM/2q_post_2/checkpoints/last.ckpt",
-            },
-            "cQLSTM_4q": {
-                "init": cQLSTM(9, 128, n_qubits=4),
-                "checkpoint": "lightning_logs/cQLSTM/4q_post_2/checkpoints/last.ckpt",
-            },
-        }
+        self.models = MODELS
         self.current = {
             "data": None,
             "from": None,
@@ -123,14 +95,20 @@ class DemoTab:
         outs = []
         labels = []
 
-        with torch.inference_mode():
-            for X, y in subset["batch"]:
-                outs.append(self.current["model"](X.unsqueeze(0)).squeeze(-1))
-                labels.append(y)
+        for X, y in subset["batch"]:
+            outs.append(X)
 
-        # Denormalize
-        outs = torch.tensor(self.current["decoder"](np.array(outs)))
-        labels = torch.tensor(self.current["decoder"](np.array(labels)))
+            y = self.current["decoder"]([y])
+
+            labels.append(y.squeeze(0))
+
+        X = torch.stack(outs)
+
+        with torch.inference_mode():
+            outs = self.current["decoder"](self.current["model"](X).detach())
+
+        outs = torch.tensor(outs)
+        labels = torch.tensor(labels)
 
         self.current["metrics"] = {
             "R2": f"{r2_score(outs, labels):.2f} %",
@@ -138,7 +116,6 @@ class DemoTab:
             "RMSE": f"{mean_squared_error(outs, labels, squared=False):.2f} kWh",
         }
 
-        # Denormalize
         outs = outs.numpy()
         labels = labels.numpy()
 

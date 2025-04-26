@@ -8,9 +8,7 @@ import torch
 matplotlib.use("Agg")
 rootutils.autosetup(".gitignore")
 
-from qlstm.models.cLSTM import cLSTM
-from qlstm.models.cQLSTM import cQLSTM
-from qlstm.models.LSTM import LSTM
+from common.models import MODELS
 from qlstm.modules.data import CDM_Hour, CDM_Day, CDM_Month
 from qlstm.modules.model import LitModel
 
@@ -18,20 +16,7 @@ from qlstm.modules.model import LitModel
 class LiveTab:
     def __init__(self, parent):
         self.parent = parent
-        self.models = {
-            "LSTM": {
-                "init": LSTM(9, 128),
-                "checkpoint": "lightning_logs/LSTM/base/checkpoints/last.ckpt",
-            },
-            "cLSTM": {
-                "init": cLSTM(9, 128),
-                "checkpoint": "lightning_logs/cLSTM/base/checkpoints/last.ckpt",
-            },
-            "cQLSTM": {
-                "init": cQLSTM(9, 128, n_qubits=2),
-                "checkpoint": "lightning_logs/cQLSTM/2q_post_2/checkpoints/last.ckpt",
-            },
-        }
+        self.models = MODELS
         self.current = {"i": 0, "data": None, "model": None, "group": "hour"}
 
     def _select_group(self, group):

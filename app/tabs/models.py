@@ -9,9 +9,8 @@ from matplotlib import pyplot as plt
 
 rootutils.autosetup(".gitignore")
 
-from qlstm.models.cLSTM import cLSTM
-from qlstm.models.cQLSTMf import cQLSTMf
-from qlstm.models.LSTM import LSTM
+from common.models import MODELS
+
 from qlstm.modules.utils import yaml_handler
 
 
@@ -22,11 +21,7 @@ class ModelsTab:
         self.data_path = self.root / "data"
         self.checkpoint_path = Path("lightning_logs")
         self.datasets = sorted([i.name for i in self.data_path.glob("*.csv")])
-        self.models = {
-            "LSTM": {"init": LSTM(9, 128), "version": "base"},
-            "cLSTM": {"init": cLSTM(9, 128), "version": "version_0"},
-            "cQLSTMf": {"init": cQLSTMf(9, 128, 2), "version": "version_9"},
-        }
+        self.models = MODELS
         self.current = {}
 
     def _update_plot(self):
