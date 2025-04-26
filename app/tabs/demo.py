@@ -17,6 +17,7 @@ matplotlib.use("Agg")
 rootutils.autosetup(".gitignore")
 
 from common.models import MODELS
+
 from qlstm.modules.data import CustomDataModule
 from qlstm.modules.model import LitModel
 
@@ -26,7 +27,6 @@ class DemoTab:
         self.parent = parent
         self.root = Path("./qlstm")
         self.data_path = self.root / "data"
-        self.model_path = self.root / "models"
         self.dataset = sorted([i.name for i in self.data_path.glob("*.csv")])
         self.models = MODELS
         self.current = {
@@ -34,6 +34,46 @@ class DemoTab:
             "from": None,
             "to": None,
         }
+
+    def _faq(self):
+        gr.Markdown("### FAQ")
+
+        with gr.Accordion("1. What is R² (Coefficient of Determination)?", open=False):
+            gr.Markdown(r"""
+                **Purpose:**  
+                Measures how much variance in the target variable is explained by the model.
+
+                **Example:**  
+                - **R² = 1.0** → Perfect prediction.
+                - **R² = 0.0** → Model predicts the mean.
+                - **R² < 0.0** → Worse than predicting the mean.
+
+                A model predicting achieves **R² = 0.85**, meaning it explains 85% of the variance.
+            """)
+
+        with gr.Accordion("2. What is MAE (Mean Absolute Error)?", open=False):
+            gr.Markdown(r"""
+                **Purpose:**  
+                Measures the average absolute difference between predicted and true values.
+
+                **Example:**  
+                - Lower MAE = better.
+                - Same units as the output variable.
+
+                MAE = **5.3** → Predictions are off by about **5.3 units** on average.
+            """)
+
+        with gr.Accordion("3. What is RMSE (Root Mean Squared Error)?", open=False):
+            gr.Markdown(r"""
+                **Purpose:**  
+                Measures the square root of the average squared difference between predictions and actuals.
+
+                **Example:**  
+                - Lower RMSE = better.
+                - Same units as output variable.
+
+                RMSE = **7.2** → Predictions are off by about **7.2 units**, especially penalizing large mistakes.
+            """)
 
     def _select_data(self, data_name):
         data = CustomDataModule(
@@ -102,13 +142,13 @@ class DemoTab:
 
             labels.append(y.squeeze(0))
 
-        X = torch.stack(outs)
+        outs = torch.stack(outs)
 
         with torch.inference_mode():
-            outs = self.current["decoder"](self.current["model"](X).detach())
+            outs = self.current["decoder"](self.current["model"](outs).detach())
 
         outs = torch.tensor(outs)
-        labels = torch.tensor(labels)
+        labels = torch.tensor(np.array(labels))
 
         self.current["metrics"] = {
             "R2": f"{r2_score(outs, labels):.2f} %",
@@ -187,7 +227,9 @@ class DemoTab:
                 gr.Markdown("### Options")
                 with gr.Row():
                     model_dropdown = gr.Dropdown(
-                        choices=self.models.keys(), label="Model", interactive=True
+                        choices=sorted(self.models.keys()),
+                        label="Model",
+                        interactive=True,
                     )
                     data_dropdown = gr.Dropdown(
                         choices=self.dataset, label="Dataset", interactive=True
@@ -232,6 +274,10 @@ class DemoTab:
             rmse_lb = gr.Label(label="RMSE")
 
         plot = gr.Plot(show_label=False)
+
+        self._faq()
+
+        ### EVENTS ###
 
         plot.change(
             lambda: [i for i in self.current["metrics"].values()],
