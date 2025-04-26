@@ -217,7 +217,7 @@ class LiveTab:
                 interactive=True,
             )
             model_dd = gr.Dropdown(
-                choices=self.models.keys(), label="Model", interactive=True
+                choices=sorted(self.models.keys()), label="Model", interactive=True
             )
 
         model_dd.select(self._update_model, model_dd, plot)
