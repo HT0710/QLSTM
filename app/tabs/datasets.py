@@ -2,7 +2,6 @@ from calendar import monthrange
 from functools import partial
 from pathlib import Path
 from datetime import datetime
-import shutil
 
 import gradio as gr
 import matplotlib.pyplot as plt

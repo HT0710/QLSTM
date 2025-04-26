@@ -3,9 +3,7 @@ from datetime import datetime
 from functools import partial
 
 import gradio as gr
-from matplotlib import pyplot as plt
 import pandas as pd
-import seaborn
 
 
 class HistoryTab:

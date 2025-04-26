@@ -58,14 +58,14 @@ class ModelsTab:
         df = pd.DataFrame(
             {
                 "name": np.repeat(names, 2),
-                "type": ["train", "test"] * len(names),
+                "Label": ["Train", "Test"] * len(names),
                 "value": np.concatenate([train, test]),
             }
         )
 
         fig, ax = plt.subplots(figsize=(10, 6), dpi=200)
 
-        sns.barplot(x="name", y="value", hue="type", data=df, ax=ax)
+        sns.barplot(x="name", y="value", hue="Label", data=df, ax=ax)
 
         fig.subplots_adjust(top=0.95, bottom=0.15)
 
