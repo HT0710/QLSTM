@@ -3,6 +3,7 @@ from pathlib import Path
 
 import gradio as gr
 import numpy as np
+import pandas as pd
 import rootutils
 import seaborn as sns
 from matplotlib import pyplot as plt
@@ -19,41 +20,57 @@ class ModelsTab:
         self.parent = parent
         self.root = Path("./qlstm")
         self.data_path = self.root / "data"
-        self.checkpoint_path = Path("lightning_logs")
         self.datasets = sorted([i.name for i in self.data_path.glob("*.csv")])
         self.models = MODELS
         self.current = {}
 
     def _update_plot(self):
         names = []
-        results = []
+        results = {"train": [], "test": []}
 
         for name, model in self.models.items():
             names.append(name)
 
-            version_path = self.checkpoint_path / name / model["version"]
+            version_path = Path(model["checkpoint"]).parents[1]
             hparams = yaml_handler(str(version_path / "hparams.yaml"))
             trained_data_name = hparams["data"]["data_path"].split("/")[-1]
 
             if trained_data_name != self.current["data"]:
-                results.append(0)
+                results["train"].append(0)
+                results["test"].append(0)
                 continue
 
             with open(str(version_path / "info.txt")) as f:
-                results.append(
-                    float(re.search(r"- Val loss:\s*([0-9.]+)", f.read()).group(1))
+                info = f.read()
+                results["train"].append(
+                    float(re.search(r"- Train loss:\s*([0-9.]+)", info).group(1))
                 )
+                results["test"].append(
+                    float(re.search(r"- Val loss:\s*([0-9.]+)", info).group(1))
+                )
+
+        combined = list(zip(names, results["train"], results["test"]))
+
+        combined_sorted = sorted(combined, key=lambda x: x[2], reverse=True)
+
+        names, train, test = zip(*combined_sorted)
+
+        df = pd.DataFrame(
+            {
+                "name": np.repeat(names, 2),
+                "type": ["train", "test"] * len(names),
+                "value": np.concatenate([train, test]),
+            }
+        )
 
         fig, ax = plt.subplots(figsize=(10, 6), dpi=200)
 
-        names, results = zip(*sorted(zip(names, results), reverse=True))
-
-        sns.barplot(x=np.array(names), y=np.array(results), ax=ax, hue=np.array(names))
+        sns.barplot(x="name", y="value", hue="type", data=df, ax=ax)
 
         fig.subplots_adjust(top=0.95, bottom=0.15)
 
         ax.set_xlabel("Model", fontsize=14, fontweight="bold", labelpad=14)
-        ax.set_ylabel("Validation Loss", fontsize=14, fontweight="bold", labelpad=14)
+        ax.set_ylabel("Loss", fontsize=14, fontweight="bold", labelpad=14)
 
         return fig
 
