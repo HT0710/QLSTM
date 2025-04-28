@@ -41,37 +41,37 @@ class DemoTab:
         with gr.Accordion("1. What is R² (Coefficient of Determination)?", open=False):
             gr.Markdown(r"""
                 **Purpose:**  
-                Measures how much variance in the target variable is explained by the model.
+                Measures how much variance in the target variable is explained by the model.  
 
-                **Example:**  
                 - **R² = 1.0** → Perfect prediction.
                 - **R² = 0.0** → Model predicts the mean.
                 - **R² < 0.0** → Worse than predicting the mean.
 
+                **Example:**  
                 A model predicting achieves **R² = 0.85**, meaning it explains 85% of the variance.
             """)
 
         with gr.Accordion("2. What is MAE (Mean Absolute Error)?", open=False):
             gr.Markdown(r"""
                 **Purpose:**  
-                Measures the average absolute difference between predicted and true values.
+                Measures the average absolute difference between predicted and true values.  
 
-                **Example:**  
                 - Lower MAE = better.
                 - Same units as the output variable.
 
+                **Example:**
                 MAE = **5.3** → Predictions are off by about **5.3 units** on average.
             """)
 
         with gr.Accordion("3. What is RMSE (Root Mean Squared Error)?", open=False):
             gr.Markdown(r"""
                 **Purpose:**  
-                Measures the square root of the average squared difference between predictions and actuals.
+                Measures the square root of the average squared difference between predictions and actuals.  
 
-                **Example:**  
                 - Lower RMSE = better.
                 - Same units as output variable.
 
+                **Example:**  
                 RMSE = **7.2** → Predictions are off by about **7.2 units**, especially penalizing large mistakes.
             """)
 
