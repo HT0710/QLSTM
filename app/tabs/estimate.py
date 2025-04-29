@@ -72,7 +72,7 @@ class SolarSystemSizing:
                     pan_need_lb = gr.Label(label="Panels Needed")
                     bat_cap_lb = gr.Label(label="Battery Capacity", visible=False)
 
-                submit_bt = gr.Button("Submit", variant="primary")
+                calc_bt = gr.Button("Calculate", variant="primary")
 
         self._faq()
 
@@ -80,13 +80,11 @@ class SolarSystemSizing:
             fn=lambda: [gr.update(value=x["value"]) for x in _inputs_fields.values()],
             outputs=inputs_nb,
         )
-        submit_bt.click(
+        calc_bt.click(
             self._solar_system_sizing,
             inputs_nb,
             [req_pv_arr_lb, pan_need_lb, bat_cap_lb],
         )
-
-        self.parent.select(scroll_to_output=True)
 
     def _solar_system_sizing(
         self,
@@ -158,14 +156,6 @@ class SolarSystemSizing:
         if days_autonomy > 0:
             battery_capacity_kwh = (daily_consumption * days_autonomy) / dod_factor
 
-        # # Build result string
-        # result = []
-        # result.append(f"Required PV Array (DC): {required_dc_kw:.2f} kW")
-        # result.append(f"Panels Needed (@{panel_power}W each): {number_of_panels:.0f}")
-        # if battery_capacity_kwh is not None:
-        #     result.append(f"Battery Capacity: {battery_capacity_kwh:.2f} kWh")
-
-        # return "\n".join(result)
         return (
             f"{required_dc_kw:.2f} kW",
             f"{number_of_panels:.0f}",
@@ -241,41 +231,153 @@ class SolarSystemSizing:
         with gr.Accordion("9. Required PV Array (DC)", open=False):
             gr.Markdown(
                 "The total **solar panel array size** you need, in **kiloWatts (kW)**.\n\n"
+                "**Formula**:\n"
+                "$$\\text{System Size (kW)} = \\frac{\\text{Daily Consumption (kWh/day)}}{\\text{Solar Irradiation (kWh/m}^2\\text{/day)} \\times (1 - \\text{System Loss})}$$\n\n"
                 "This number tells you how much **total generation capacity** your system must have to meet your daily needs, after accounting for system losses and efficiency."
             )
 
         with gr.Accordion("10. Panels Needed", open=False):
             gr.Markdown(
                 "The **number of solar panels** you need, based on the panel wattage you selected.\n\n"
+                "**Formula**:\n"
+                "$$\\text{Number of Panels} = \\frac{\\text{System Size (kW)} \\times 1000}{\\text{Panel Power Rating (W)}}$$\n\n"
                 "**Example**: If you need 5 kW total and each panel is 400 W, you will need about 13 panels."
             )
 
         with gr.Accordion("11. Battery Capacity", open=False):
             gr.Markdown(
                 "If you requested backup autonomy, this output shows the **battery bank size** needed, in **kWh**.\n\n"
+                "**Formula**:\n"
+                "$$\\text{Battery Size (kWh)} = \\frac{\\text{Daily Consumption (kWh)} \\times \\text{Days of Autonomy}}{\\text{DoD}}$$\n\n"
                 "It calculates how much stored energy you need to survive the number of days you selected, based on daily consumption and battery depth of discharge."
             )
 
-        with gr.Accordion("12. How is System Size Calculated?", open=False):
-            gr.Markdown(r"""
-                $$
-                \text{System Size (kW)} = \frac{\text{Daily Consumption (kWh/day)}}{\text{Solar Irradiation (kWh/m}^2\text{/day)} \times (1 - \text{System Loss})}
-                $$
-            """)
 
-        with gr.Accordion("13. How is Number of Panels Calculated?", open=False):
-            gr.Markdown(r"""
-                $$
-                \text{Number of Panels} = \frac{\text{System Size (kW)} \times 1000}{\text{Panel Power Rating (W)}}
-                $$
-            """)
+class EnergyYieldEstimation:
+    def __init__(self, parent):
+        self.parent = parent
 
-        with gr.Accordion("14. How is Battery Sizing Calculated?", open=False):
-            gr.Markdown(r"""
-                $$
-                \text{Battery Size (kWh)} = \frac{\text{Daily Consumption (kWh)} \times \text{Days of Autonomy}}{\text{DoD}}
-                $$
-            """)
+        _inputs_fields = {
+            "annual_irradiation": {
+                "label": "Annual Irradiation (kWh/m²/year)",
+                "value": 1_500,
+                "precision": 0,
+            },
+            "installed_capacity": {
+                "label": "Installed Capacity (kWp)",
+                "value": 5.0,
+                "precision": 2,
+            },
+            "performance_ratio": {
+                "label": "Performance Ratio (%)",
+                "value": 75.0,
+                "precision": 1,
+            },
+        }
+
+        gr.Markdown(
+            "Estimate annual energy production and capacity factor based on system size, solar resource, and real-world performance."
+        )
+
+        with gr.Row():
+            with gr.Column():
+                gr.Markdown("## Inputs")
+
+                inputs_nb = [
+                    gr.Number(**params, interactive=True)
+                    for params in _inputs_fields.values()
+                ]
+
+                reset_bt = gr.Button("Reset", variant="secondary")
+
+            with gr.Column():
+                gr.Markdown("## Results")
+                with gr.Row():
+                    self.aep_lb = gr.Label(label="Annual Energy Production (kWh)")
+                    self.cf_lb = gr.Label(label="Capacity Factor (%)")
+
+                self.calc_bt = gr.Button("Calculate", variant="primary")
+
+        self._faq()
+
+        reset_bt.click(
+            fn=lambda: [gr.update(value=x["value"]) for x in _inputs_fields.values()],
+            outputs=inputs_nb,
+        )
+        self.calc_bt.click(self._estimate_yield, inputs_nb, [self.aep_lb, self.cf_lb])
+
+    def _estimate_yield(self, annual_irrad: float, capacity_kwp: float, pr_pct: float):
+        """
+        AEP = capacity * irradiation * (PR/100)
+        CF = AEP / (capacity * 8760h) * 100%
+        """
+        # validation
+        errors = []
+        if annual_irrad <= 0:
+            errors.append("Irradiation must be positive.")
+        if capacity_kwp <= 0:
+            errors.append("Capacity must be positive.")
+        if not (0 < pr_pct <= 100):
+            errors.append("PR must be 0-100%.")
+        if errors:
+            return "\n".join(errors), ""
+
+        pr_factor = pr_pct / 100
+        aep = capacity_kwp * annual_irrad * pr_factor
+        cf = (aep / (capacity_kwp * 8760)) * 100
+
+        return f"{aep:,.0f}", f"{cf:.1f}"
+
+    def _faq(self):
+        gr.Markdown("## FAQ")
+
+        with gr.Accordion("1. Annual Irradiation (kWh/m²/year)", open=False):
+            gr.Markdown(
+                "This represents the **total solar energy** received per square meter over a year at your location.\n\n"
+                "**Typical Values**:\n"
+                "- Southern Vietnam: ~1000-2000\n"
+                "- Northern Vietnam: ~500-1000\n"
+                "- Southern Europe: ~1600-2000\n"
+                "- Desert regions: ~2200-2400+\n\n"
+                "**Tip**: Use satellite tools like [Global Solar Atlas](https://globalsolaratlas.info/map) to get the value for your site."
+            )
+
+        with gr.Accordion("2. Installed Capacity (kWp)", open=False):
+            gr.Markdown(
+                "This is the **total rated power** of your solar PV system under standard test conditions, in kilowatts peak (kWp).\n\n"
+                "Example: If you install 12 panels rated at 400W each, your installed capacity is:\n"
+                "12 x 400W = 4.8 kWp."
+            )
+
+        with gr.Accordion("3. Performance Ratio (PR %)", open=False):
+            gr.Markdown(
+                "The **Performance Ratio** (PR) quantifies real-world system efficiency after accounting for various losses like inverter inefficiency, temperature, soiling, shading, and wiring.\n\n"
+                "**Typical Range**: 70%-85% depending on climate and equipment quality.\n\n"
+                "A higher PR means your system performs closer to its theoretical maximum.\n\n"
+                "**Formula**:\n"
+                "$$PR = \\frac{\\text{Actual Energy Output}}{\\text{Theoretical Energy Output}}$$"
+            )
+
+        with gr.Accordion("4. Annual Energy Production (AEP)", open=False):
+            gr.Markdown(
+                "This is the estimated **total amount of electricity** (in kWh) your system will produce in one year, considering solar resource and losses.\n\n"
+                "**Formula**:\n"
+                "$$AEP = \\text{Installed Capacity (kWp)} \\times \\text{Annual Irradiation (kWh/m²)} \\times \\frac{PR}{100}$$\n\n"
+                "It tells you how much energy you can expect to generate from your system per year."
+            )
+
+        with gr.Accordion("5. Capacity Factor (%)", open=False):
+            gr.Markdown(
+                "The **Capacity Factor (CF)** represents how efficiently a power plant operates compared to its maximum possible output over time.\n\n"
+                "For solar systems, it accounts for night, cloudy weather, and system losses.\n\n"
+                "**Formula**:\n"
+                "$$CF = \\frac{\\text{AEP}}{\\text{Installed Capacity (kW)} \\times 8760 \\text{ hours}} \\times 100\\%$$\n\n"
+                "**Typical Range**:\n"
+                "- Poor site: 10-12%\n"
+                "- Good site: 15-18%\n"
+                "- Excellent site: 20-25%\n\n"
+                "Higher CF means more consistent and productive generation."
+            )
 
 
 class EstimateTab:
@@ -285,3 +387,6 @@ class EstimateTab:
     def __call__(self):
         with gr.Tab("Solar System Sizing"):
             SolarSystemSizing(self.parent)
+
+        with gr.Tab("Energy Yield Estimation"):
+            EnergyYieldEstimation(self.parent)
