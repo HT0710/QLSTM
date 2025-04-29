@@ -40,39 +40,42 @@ class DemoTab:
 
         with gr.Accordion("1. What is R² (Coefficient of Determination)?", open=False):
             gr.Markdown(r"""
-                **Purpose:**  
                 Measures how much variance in the target variable is explained by the model.  
 
                 - **R² = 1.0** → Perfect prediction.
                 - **R² = 0.0** → Model predicts the mean.
                 - **R² < 0.0** → Worse than predicting the mean.
 
-                **Example:**  
-                A model predicting achieves **R² = 0.85**, meaning it explains 85% of the variance.
+                **Example:** A model predicting achieves **R² = 0.85**, meaning it explains 85% of the variance.
+                
+                **Formula:**  
+                $$ R^2 = 1 - \frac{\sum_{i=1}^{n}(y_i - \hat{y}_i)^2}{\sum_{i=1}^{n}(y_i - \bar{y})^2} $$
             """)
 
         with gr.Accordion("2. What is MAE (Mean Absolute Error)?", open=False):
             gr.Markdown(r"""
-                **Purpose:**  
                 Measures the average absolute difference between predicted and true values.  
 
                 - Lower MAE = better.
                 - Same units as the output variable.
 
-                **Example:**
-                MAE = **5.3** → Predictions are off by about **5.3 units** on average.
+                **Example:** MAE = **5.3** → Predictions are off by about **5.3 units** on average.
+
+                **Formula:**  
+                $$ MAE = \frac{1}{n} \sum_{i=1}^{n} | y_i - \hat{y}_i | $$
             """)
 
         with gr.Accordion("3. What is RMSE (Root Mean Squared Error)?", open=False):
             gr.Markdown(r"""
-                **Purpose:**  
                 Measures the square root of the average squared difference between predictions and actuals.  
 
                 - Lower RMSE = better.
                 - Same units as output variable.
 
-                **Example:**  
-                RMSE = **7.2** → Predictions are off by about **7.2 units**, especially penalizing large mistakes.
+                **Example:** RMSE = **7.2** → Predictions are off by about **7.2 units**, especially penalizing large mistakes.
+
+                **Formula:**  
+                $$ RMSE = \sqrt{ \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2 } $$
             """)
 
     def _select_data(self, data_name):
