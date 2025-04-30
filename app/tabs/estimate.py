@@ -177,7 +177,7 @@ class SolarSystemSizing:
         with gr.Accordion("2. Solar Irradiation (kWh/m²/day)", open=False):
             gr.Markdown(
                 "The average amount of sunlight energy available **per square meter per day** at your location.\n\n"
-                "**Example**: Typical values are:\n"
+                "**Example**:\n"
                 "- Vietnam: 3.6-5.5 kWh/m²/day\n"
                 "- Europe: 2.5-5.5 kWh/m²/day\n"
                 "- USA (Southwest): 5-7 kWh/m²/day\n\n"
@@ -228,32 +228,32 @@ class SolarSystemSizing:
                 "**Tip**: Use the panel's datasheet or label to find this number."
             )
 
-        with gr.Accordion("9. Required PV Array (DC)", open=False):
+        with gr.Accordion("9. How is Required PV Array (DC) Calculated?", open=False):
             gr.Markdown(
-                "The total **solar panel array size** you need, in **kiloWatts (kW)**.\n\n"
-                "**Formula**:\n"
-                "$$\\text{System Size (kW)} = \\frac{\\text{Daily Consumption (kWh/day)}}{\\text{Solar Irradiation (kWh/m}^2\\text{/day)} \\times (1 - \\text{System Loss})}$$\n\n"
-                "This number tells you how much **total generation capacity** your system must have to meet your daily needs, after accounting for system losses and efficiency."
+                "The total **solar panel array size** you need, in **kilowatt-peak (kWp)**, which is the rated output of the panels under standard conditions (STC).\n\n"
+                "**Formula**:"
+                "$$\\text{Required PV Array} = \\frac{\\text{Daily Consumption}}{\\text{Solar Irradiation} \\times (1 - \\text{System Loss})}$$\n\n"
+                "This number tells you how much DC-rated total generation capacity (in kWp) your solar array must have to meet your daily energy needs, after accounting for system losses and average solar resource."
             )
 
-        with gr.Accordion("10. Panels Needed", open=False):
+        with gr.Accordion("10. How is Panels Needed Calculated?", open=False):
             gr.Markdown(
                 "The **number of solar panels** you need, based on the panel wattage you selected.\n\n"
-                "**Formula**:\n"
-                "$$\\text{Number of Panels} = \\frac{\\text{System Size (kW)} \\times 1000}{\\text{Panel Power Rating (W)}}$$\n\n"
+                "**Formula**:"
+                "$$\\text{Number of Panels} = \\frac{\\text{System Size} \\times 1000}{\\text{Panel Power Rating}}$$\n\n"
                 "**Example**: If you need 5 kW total and each panel is 400 W, you will need about 13 panels."
             )
 
-        with gr.Accordion("11. Battery Capacity", open=False):
+        with gr.Accordion("11. How is Battery Capacity (kWh) Calculated?", open=False):
             gr.Markdown(
                 "If you requested backup autonomy, this output shows the **battery bank size** needed, in **kWh**.\n\n"
-                "**Formula**:\n"
-                "$$\\text{Battery Size (kWh)} = \\frac{\\text{Daily Consumption (kWh)} \\times \\text{Days of Autonomy}}{\\text{DoD}}$$\n\n"
+                "**Formula**:"
+                "$$\\text{Battery Capacity} = \\frac{\\text{Daily Consumption} \\times \\text{Days of Autonomy}}{\\text{DoD}}$$\n\n"
                 "It calculates how much stored energy you need to survive the number of days you selected, based on daily consumption and battery depth of discharge."
             )
 
 
-class EnergyYieldEstimation:
+class EnergyYield:
     def __init__(self, parent):
         self.parent = parent
 
@@ -349,34 +349,363 @@ class EnergyYieldEstimation:
                 "12 x 400W = 4.8 kWp."
             )
 
-        with gr.Accordion("3. Performance Ratio (PR %)", open=False):
+        with gr.Accordion("3. Performance Ratio (%)", open=False):
             gr.Markdown(
-                "The **Performance Ratio** (PR) quantifies real-world system efficiency after accounting for various losses like inverter inefficiency, temperature, soiling, shading, and wiring.\n\n"
+                "The **Performance Ratio (PR)** quantifies real-world system efficiency after accounting for various losses like inverter inefficiency, temperature, soiling, shading, and wiring.\n\n"
                 "**Typical Range**: 70%-85% depending on climate and equipment quality.\n\n"
-                "A higher PR means your system performs closer to its theoretical maximum.\n\n"
-                "**Formula**:\n"
-                "$$PR = \\frac{\\text{Actual Energy Output}}{\\text{Theoretical Energy Output}}$$"
+                "**Formula**:"
+                "$$PR = \\frac{\\text{Actual Energy Output}}{\\text{Theoretical Energy Output}}$$\n\n"
+                "A higher PR means your system performs closer to its theoretical maximum."
             )
 
-        with gr.Accordion("4. Annual Energy Production (AEP)", open=False):
+        with gr.Accordion(
+            "4. How is Annual Energy Production (kWh) Calculated?", open=False
+        ):
             gr.Markdown(
-                "This is the estimated **total amount of electricity** (in kWh) your system will produce in one year, considering solar resource and losses.\n\n"
-                "**Formula**:\n"
-                "$$AEP = \\text{Installed Capacity (kWp)} \\times \\text{Annual Irradiation (kWh/m²)} \\times \\frac{PR}{100}$$\n\n"
+                "This is the estimated **total amount of electricity (AEP)** (in kWh) your system will produce in one year, considering solar resource and losses.\n\n"
+                "**Formula**:"
+                "$$AEP = \\text{Installed Capacity} \\times \\text{Annual Irradiation} \\times \\frac{PR}{100}$$\n\n"
                 "It tells you how much energy you can expect to generate from your system per year."
             )
 
-        with gr.Accordion("5. Capacity Factor (%)", open=False):
+        with gr.Accordion("5. How is Capacity Factor (%) Calculated?", open=False):
             gr.Markdown(
                 "The **Capacity Factor (CF)** represents how efficiently a power plant operates compared to its maximum possible output over time.\n\n"
                 "For solar systems, it accounts for night, cloudy weather, and system losses.\n\n"
-                "**Formula**:\n"
-                "$$CF = \\frac{\\text{AEP}}{\\text{Installed Capacity (kW)} \\times 8760 \\text{ hours}} \\times 100\\%$$\n\n"
                 "**Typical Range**:\n"
                 "- Poor site: 10-12%\n"
                 "- Good site: 15-18%\n"
                 "- Excellent site: 20-25%\n\n"
+                "**Formula**:"
+                "$$CF = \\frac{\\text{AEP}}{\\text{Installed Capacity} \\times 8760 \\text{ hours}} \\times 100\\%$$\n\n"
                 "Higher CF means more consistent and productive generation."
+            )
+
+
+class ROI:
+    def __init__(self, parent):
+        self.parent = parent
+
+        _inputs_fields = {
+            "system_cost": {
+                "label": "Initial System Cost",
+                "value": 10_000,
+                "precision": 2,
+            },
+            "annual_output": {
+                "label": "Annual Energy Output (kWh)",
+                "value": 5_000,
+                "precision": 0,
+            },
+            "electricity_rate": {
+                "label": "Electricity Rate (per kWh)",
+                "value": 0.20,
+                "precision": 3,
+            },
+            "system_lifetime": {
+                "label": "System Lifetime (years)",
+                "value": 25,
+                "precision": 0,
+            },
+        }
+
+        gr.Markdown(
+            "Estimate financial return based on installation cost, energy savings, incentives, and system lifespan. "
+            "Helps assess long-term economic benefits of your solar investment."
+        )
+
+        with gr.Row():
+            with gr.Column():
+                gr.Markdown("## Inputs")
+
+                inputs_nb = [
+                    gr.Number(**params, interactive=True)
+                    for params in _inputs_fields.values()
+                ]
+
+                reset_bt = gr.Button("Reset", variant="secondary")
+
+            with gr.Column():
+                gr.Markdown("## Results")
+
+                self.roi_lb = gr.Label(label="ROI (%)")
+
+                self.calc_roi = gr.Button("Calculate", variant="primary")
+
+        self._faq()
+        reset_bt.click(
+            fn=lambda: [gr.update(value=x["value"]) for x in _inputs_fields.values()],
+            outputs=inputs_nb,
+        )
+        self.calc_roi.click(
+            fn=self._calculate_roi,
+            inputs=inputs_nb,
+            outputs=[self.roi_lb],
+        )
+
+    def _calculate_roi(self, cost, output, rate, lifetime):
+        # net savings = total revenue - cost
+        total_savings = output * rate * lifetime
+        roi = (total_savings - cost) / cost * 100
+        return f"{roi:.1f}"
+
+    def _faq(self):
+        gr.Markdown("## FAQ")
+        with gr.Accordion("1. Initial System Cost", open=False):
+            gr.Markdown(
+                "The total upfront investment including panels, inverters, mounting, and installation fees.\n\n"
+                "**Example**: A 5 kW system might cost around $10,000.\n\n"
+                "**Tip**: Get multiple quotes and include all soft costs (permits, labor)."
+            )
+        with gr.Accordion("2. Annual Energy Output (kWh)", open=False):
+            gr.Markdown(
+                "The estimated electricity your system will generate per year.\n\n"
+                "**Example**: 5,000 kWh/year for a typical residential PV system.\n\n"
+                "**Tip**: Use your Energy Yield tab or utility bills."
+            )
+        with gr.Accordion("3. Electricity Rate (per kWh)", open=False):
+            gr.Markdown(
+                "Your current cost of grid electricity.\n\n"
+                "**Example**: $0.20/kWh if your bill is $200 for 1,000 kWh.\n\n"
+                "**Tip**: Check recent utility bills; rates can vary seasonally."
+            )
+        with gr.Accordion("4. System Lifetime (years)", open=False):
+            gr.Markdown(
+                "The expected operational lifespan of your PV system.\n\n"
+                "**Typical Range**: 20-30 years.\n\n"
+                "**Tip**: Manufacturer warranty often indicates reliable lifetime."
+            )
+        with gr.Accordion("5. How is ROI (%) Calculated?", open=False):
+            gr.Markdown(
+                "**Formula**:"
+                "$$ROI = \\frac{(\\text{Annual Output} \\times \\text{Rate} \\times \\text{Lifetime}) - \\text{Initial Cost}}{\\text{Initial Cost}} \\times 100$$\n\n"
+                "It measures the percentage return on your investment over the system life."
+            )
+
+
+class Payback:
+    def __init__(self, parent):
+        self.parent = parent
+
+        _inputs_fields = {
+            "system_cost": {
+                "label": "Initial System Cost",
+                "value": 10_000,
+                "precision": 2,
+            },
+            "annual_output": {
+                "label": "Annual Energy Output (kWh)",
+                "value": 5_000,
+                "precision": 0,
+            },
+            "electricity_rate": {
+                "label": "Electricity Rate (per kWh)",
+                "value": 0.20,
+                "precision": 3,
+            },
+        }
+
+        gr.Markdown(
+            "Calculate the number of years required to recover the initial investment from energy savings. "
+            "Useful for comparing system cost-efficiency over time."
+        )
+
+        with gr.Row():
+            with gr.Column():
+                gr.Markdown("## Inputs")
+
+                inputs_nb = [
+                    gr.Number(**params, interactive=True)
+                    for params in _inputs_fields.values()
+                ]
+
+                reset_bt = gr.Button("Reset", variant="secondary")
+
+            with gr.Column():
+                gr.Markdown("## Results")
+
+                self.payback_lb = gr.Label(label="Payback Period (years)")
+
+                self.calc_payback = gr.Button("Calculate", variant="primary")
+
+        self._faq()
+        reset_bt.click(
+            fn=lambda: [gr.update(value=x["value"]) for x in _inputs_fields.values()],
+            outputs=inputs_nb,
+        )
+        self.calc_payback.click(
+            fn=self._calculate_payback,
+            inputs=inputs_nb,
+            outputs=[self.payback_lb],
+        )
+
+    def _calculate_payback(self, cost, output, rate):
+        annual_savings = output * rate
+        if annual_savings <= 0:
+            return "Error: Savings must be positive."
+        payback = cost / annual_savings
+        return f"{payback:.1f}"
+
+    def _faq(self):
+        gr.Markdown("## FAQ")
+
+        with gr.Accordion("1. Initial System Cost", open=False):
+            gr.Markdown(
+                "The total upfront investment including panels, inverters, mounting, and installation fees.\n\n"
+                "**Example**: A 5 kW system might cost around $10,000.\n\n"
+                "**Tip**: Get multiple quotes and include all soft costs (permits, labor)."
+            )
+        with gr.Accordion("2. Annual Energy Output (kWh)", open=False):
+            gr.Markdown(
+                "The estimated electricity your system will generate per year.\n\n"
+                "**Example**: 5,000 kWh/year for a typical residential PV system.\n\n"
+                "**Tip**: Use your Energy Yield tab or utility bills."
+            )
+        with gr.Accordion("3. Electricity Rate (per kWh)", open=False):
+            gr.Markdown(
+                "Your current cost of grid electricity.\n\n"
+                "**Example**: $0.20/kWh if your bill is $200 for 1,000 kWh.\n\n"
+                "**Tip**: Check recent utility bills; rates can vary seasonally."
+            )
+        with gr.Accordion("4. How is Payback Period (years) Calculated?", open=False):
+            gr.Markdown(
+                "**Formula**:"
+                "$$\\text{Payback Period} = \\frac{\\text{Initial Cost}}{\\text{Annual Savings}}$$\n\n"
+                "It shows how many years until your investment is recovered."
+            )
+
+
+class EnvironmentalImpact:
+    def __init__(self, parent):
+        self.parent = parent
+
+        _inputs_fields = {
+            "annual_output": {
+                "label": "Annual Energy Output (kWh)",
+                "value": 5_000,
+                "precision": 0,
+            },
+            "grid_emission": {
+                "label": "Grid Emission Factor (kg CO₂/kWh)",
+                "value": 0.5,
+                "precision": 3,
+            },
+            "embodied_energy": {
+                "label": "Embodied Energy (kWh)",
+                "value": 15_000,
+                "precision": 0,
+            },
+            "lifecycle_emissions": {
+                "label": "Lifecycle Emissions (kg CO₂-eq)",
+                "value": 10_000,
+                "precision": 0,
+            },
+        }
+
+        gr.Markdown(
+            "Quantify carbon emissions offset, equivalent trees planted, or fossil fuel displacement. "
+            "Helps understand the sustainability benefits of solar adoption."
+        )
+
+        with gr.Row():
+            with gr.Column():
+                gr.Markdown("## Inputs")
+
+                inputs_nb = [
+                    gr.Number(**params, interactive=True)
+                    for params in _inputs_fields.values()
+                ]
+
+                reset_bt = gr.Button("Reset", variant="secondary")
+
+            with gr.Column():
+                gr.Markdown("## Results")
+
+                with gr.Row():
+                    self.co2_lb = gr.Label(label="CO₂ Avoided (tons/year)")
+                    self.epbt_lb = gr.Label(label="Energy Payback Time (years)")
+                    self.ghg_lb = gr.Label(label="GHG Intensity (g CO₂-eq/kWh)")
+
+                self.calc_impact = gr.Button("Calculate", variant="primary")
+
+        self._faq()
+        reset_bt.click(
+            fn=lambda: [gr.update(value=x["value"]) for x in _inputs_fields.values()],
+            outputs=inputs_nb,
+        )
+        self.calc_impact.click(
+            fn=self._calculate_environmental,
+            inputs=inputs_nb,
+            outputs=[self.co2_lb, self.epbt_lb, self.ghg_lb],
+        )
+
+    def _calculate_environmental(self, output, factor, embodied, lifecycle):
+        # CO2 avoided
+        co2_avoided = output * factor / 1000  # tons/year
+        # EPBT
+        epbt = embodied / output if output > 0 else 0
+        # GHG intensity
+        total_prod = output * 25  # assume 25-year lifetime
+        ghg_intensity = lifecycle * 1000 / total_prod if total_prod > 0 else 0  # g/kWh
+        return (f"{co2_avoided:.2f}", f"{epbt:.2f}", f"{ghg_intensity:.1f}")
+
+    def _faq(self):
+        gr.Markdown("## FAQ")
+
+        with gr.Accordion("1. Annual Energy Output (kWh)", open=False):
+            gr.Markdown(
+                "The total amount of electricity the system generates in one year.\n\n"
+                "**Example**: A 5 kW system at 1,000 kWh/kW-year produces ~5,000 kWh/year.\n\n"
+                "**Tip**: Check your system specifications or solar calculator output."
+            )
+
+        with gr.Accordion("2. Grid Emission Factor (kg CO₂/kWh)", open=False):
+            gr.Markdown(
+                "The amount of CO₂ emitted per kWh of electricity from the grid.\n\n"
+                "**Example**: If your utility reports 0.5 kg CO₂/kWh, then 1 kWh offset avoids 0.5 kg CO₂.\n\n"
+                "**Sources**: Local grid operator or national emission inventory."
+            )
+
+        with gr.Accordion("3. Embodied Energy (kWh)", open=False):
+            gr.Markdown(
+                "The total energy consumed to manufacture, transport, and install the solar system.\n\n"
+                "**Example**: A 5 kW system may require ~15,000 kWh embodied energy.\n\n"
+                "**Note**: Includes raw materials, fabrication, and logistics."
+            )
+
+        with gr.Accordion("4. Lifecycle Emissions (kg CO₂-eq)", open=False):
+            gr.Markdown(
+                "The total greenhouse gas emissions over the system's lifetime, expressed in CO₂ equivalents.\n\n"
+                "**Example**: 10,000 kg CO₂-eq covers production, maintenance, and decommissioning.\n\n"
+                "**Tip**: Use LCA studies or standard databases (e.g., ISO 14040)."
+            )
+
+        with gr.Accordion("5. How is CO₂ Avoided (tons/year) Calculated?", open=False):
+            gr.Markdown(
+                "Annual CO₂ emissions avoided by generating solar power instead of grid electricity.\n\n"
+                "**Formula**:"
+                "$$\\text{CO₂ Avoided} = \\frac{\\text{Annual Output} \\times \\text{Grid Emission}}{1000}$$\n\n"
+                "**Example**: 5,000 kWh x 0.5 kg/kWh = 2,500 kg = 2.5 tons."
+            )
+
+        with gr.Accordion(
+            "6. How is Energy Payback Time (years) Calculated?", open=False
+        ):
+            gr.Markdown(
+                "Time required for the system to 'pay back' its embodied energy through clean energy generation.\n\n"
+                "**Formula**:"
+                "$$\\text{Payback Time} = \\frac{\\text{Embodied Energy}}{\\text{Annual Output}}$$\n"
+                "**Example**: 15,000 kWh / 5,000 kWh/year = 3 years."
+            )
+
+        with gr.Accordion(
+            "7. How is GHG Intensity (g CO₂-eq/kWh) Calculated?", open=False
+        ):
+            gr.Markdown(
+                "Greenhouse gas emissions per kWh over the system's lifecycle.\n\n"
+                "**Formula**:"
+                "$$\\text{Emission Intensity} = \\frac{\\text{Lifecycle Emissions} \\times 1000}{\\text{Annual Output} \\times \\text{System Lifetime}}$$\n\n"
+                "**Note**: If System Lifetime = 25 years, then for 10,000 kg CO₂-eq: (10,000x1000) / (5,000x25) = 80 g CO₂-eq/kWh."
             )
 
 
@@ -388,5 +717,14 @@ class EstimateTab:
         with gr.Tab("Solar System Sizing"):
             SolarSystemSizing(self.parent)
 
-        with gr.Tab("Energy Yield Estimation"):
-            EnergyYieldEstimation(self.parent)
+        with gr.Tab("Energy Yield"):
+            EnergyYield(self.parent)
+
+        with gr.Tab("ROI"):
+            ROI(self.parent)
+
+        with gr.Tab("Payback"):
+            Payback(self.parent)
+
+        with gr.Tab("Environmental Impact"):
+            EnvironmentalImpact(self.parent)
