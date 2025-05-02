@@ -1,3 +1,4 @@
+import os
 import gradio as gr
 import matplotlib
 import numpy as np
@@ -68,7 +69,20 @@ class LiveTab:
         ).eval()
 
     def _predict(self):
-        subset = self.current["data"][self.current["i"] : self.current["i"] + 23]
+        _range = (
+            23
+            if self.current["group"] == "hour"
+            else 15
+            if self.current["group"] == "day"
+            else 7
+        )
+        _anchor = _range // 2 + 1
+
+        subset = self.current["data"][self.current["i"] : self.current["i"] + _range]
+
+        if subset is None:
+            self.current["i"] = 0
+            return self._predict()
 
         outs = []
         labels = []
@@ -95,14 +109,18 @@ class LiveTab:
         actual = pd.DataFrame({"Value": labels, "Label": "Actual"})
         predicted = pd.DataFrame({"Value": outs, "Label": "Forecasted"})
 
-        data = pd.concat([actual[:12], predicted[12:23]], ignore_index=True)
+        data = pd.concat(
+            [actual[:_anchor], predicted[_anchor:_range]], ignore_index=True
+        )
 
-        data["Time"] = subset.index[:23].tz_localize("Asia/Ho_Chi_Minh")
+        data["Time"] = subset.index[:_range].tz_localize("Asia/Ho_Chi_Minh")
 
-        self.current["join"] = join = data[11:12].copy()
+        self.current["join"] = join = data[_anchor - 1 : _anchor].copy()
         join["Label"] = "Forecasted"
 
-        data = pd.concat([data[:12], join, data[12:23]], ignore_index=True)
+        data = pd.concat(
+            [data[:_anchor], join, data[_anchor:_range]], ignore_index=True
+        )
 
         fig = gr.LinePlot(
             data,
@@ -141,24 +159,32 @@ class LiveTab:
             data.prepare_data()
             data.setup("predict")
 
-            df = data.dataframe.copy()
+            l_path = "qlstm/data/trainable/Albany_WA.l.csv"
 
-            # Drop unnamed columns
-            df = df.loc[:, ~df.columns.str.contains("^Unnamed", case=False)]
+            if not os.path.exists(l_path):
+                df = data.dataframe.copy()
 
-            # Convert 'date' and 'hour' columns to datetime type
-            df["date"] = pd.to_datetime(df["date"])
-            df["hour"] = pd.to_timedelta(df["hour"], unit="h")
-            df["date"] = df["date"] + df["hour"]
-            df = df.rename(columns={"date": "datetime"})
-            df.drop(["year", "hour", "month", "day"], axis=1, inplace=True)
+                # Drop unnamed columns
+                df = df.loc[:, ~df.columns.str.contains("^Unnamed", case=False)]
 
-            df = df.sort_values(by="datetime")
+                # Convert 'date' and 'hour' columns to datetime type
+                df["date"] = pd.to_datetime(df["date"])
+                df["hour"] = pd.to_timedelta(df["hour"], unit="h")
+                df["date"] = df["date"] + df["hour"]
+                df = df.rename(columns={"date": "datetime"})
+                df.drop(["year", "hour", "month", "day"], axis=1, inplace=True)
 
-            # Fill missing hours
-            df = data._fill_hours(df, start=6, end=18)
-            df.interpolate(method="linear", inplace=True)
-            df = data._fill_hours(df, value=0)
+                df = df.sort_values(by="datetime")
+
+                # Fill missing hours
+                df = data._fill_hours(df, start=6, end=18)
+                df.interpolate(method="linear", inplace=True)
+                df = data._fill_hours(df, value=0)
+
+                df.to_csv(l_path, index_label="datetime", index=False)
+
+            else:
+                df = pd.read_csv(l_path)
 
             self.df = df
 
