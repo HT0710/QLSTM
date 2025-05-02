@@ -1,6 +1,199 @@
 import gradio as gr
 
 
+class ROI:
+    def __init__(self, parent):
+        self.parent = parent
+
+        _inputs_fields = {
+            "system_cost": {
+                "label": "Initial System Cost",
+                "value": 10_000,
+                "precision": 2,
+            },
+            "annual_output": {
+                "label": "Annual Energy Output (kWh)",
+                "value": 5_000,
+                "precision": 0,
+            },
+            "electricity_rate": {
+                "label": "Electricity Rate (per kWh)",
+                "value": 0.20,
+                "precision": 3,
+            },
+            "system_lifetime": {
+                "label": "System Lifetime (years)",
+                "value": 25,
+                "precision": 0,
+            },
+        }
+
+        gr.Markdown(
+            "Estimate financial return based on installation cost, energy savings, incentives, and system lifespan. "
+            "Helps assess long-term economic benefits of your solar investment."
+        )
+
+        with gr.Row():
+            with gr.Column():
+                gr.Markdown("## Inputs")
+
+                inputs_nb = [
+                    gr.Number(**params, interactive=True)
+                    for params in _inputs_fields.values()
+                ]
+
+                reset_bt = gr.Button("Reset", variant="secondary")
+
+            with gr.Column():
+                gr.Markdown("## Results")
+
+                self.roi_lb = gr.Label(label="ROI (%)")
+
+                self.calc_roi = gr.Button("Calculate", variant="primary")
+
+        self._faq()
+        reset_bt.click(
+            fn=lambda: [gr.update(value=x["value"]) for x in _inputs_fields.values()],
+            outputs=inputs_nb,
+        )
+        self.calc_roi.click(
+            fn=self._calculate_roi,
+            inputs=inputs_nb,
+            outputs=[self.roi_lb],
+        )
+
+    def _calculate_roi(self, cost, output, rate, lifetime):
+        # net savings = total revenue - cost
+        total_savings = output * rate * lifetime
+        roi = (total_savings - cost) / cost * 100
+        return f"{roi:.1f}"
+
+    def _faq(self):
+        gr.Markdown("## FAQ")
+        with gr.Accordion("1. Initial System Cost", open=False):
+            gr.Markdown(
+                "The total upfront investment including panels, inverters, mounting, and installation fees.\n\n"
+                "**Example**: A 5 kW system might cost around $10,000.\n\n"
+                "**Tip**: Get multiple quotes and include all soft costs (permits, labor)."
+            )
+        with gr.Accordion("2. Annual Energy Output (kWh)", open=False):
+            gr.Markdown(
+                "The estimated electricity your system will generate per year.\n\n"
+                "**Example**: 5,000 kWh/year for a typical residential PV system.\n\n"
+                "**Tip**: Use your Energy Yield tab or utility bills."
+            )
+        with gr.Accordion("3. Electricity Rate (per kWh)", open=False):
+            gr.Markdown(
+                "Your current cost of grid electricity.\n\n"
+                "**Example**: $0.20/kWh if your bill is $200 for 1,000 kWh.\n\n"
+                "**Tip**: Check recent utility bills; rates can vary seasonally."
+            )
+        with gr.Accordion("4. System Lifetime (years)", open=False):
+            gr.Markdown(
+                "The expected operational lifespan of your PV system.\n\n"
+                "**Typical Range**: 20-30 years.\n\n"
+                "**Tip**: Manufacturer warranty often indicates reliable lifetime."
+            )
+        with gr.Accordion("5. How is ROI (%) Calculated?", open=False):
+            gr.Markdown(
+                "**Formula**:"
+                "$$ROI = \\frac{(\\text{Annual Output} \\times \\text{Rate} \\times \\text{Lifetime}) - \\text{Initial Cost}}{\\text{Initial Cost}} \\times 100$$\n\n"
+                "It measures the percentage return on your investment over the system life."
+            )
+
+
+class Payback:
+    def __init__(self, parent):
+        self.parent = parent
+
+        _inputs_fields = {
+            "system_cost": {
+                "label": "Initial System Cost",
+                "value": 10_000,
+                "precision": 2,
+            },
+            "annual_output": {
+                "label": "Annual Energy Output (kWh)",
+                "value": 5_000,
+                "precision": 0,
+            },
+            "electricity_rate": {
+                "label": "Electricity Rate (per kWh)",
+                "value": 0.20,
+                "precision": 3,
+            },
+        }
+
+        gr.Markdown(
+            "Calculate the number of years required to recover the initial investment from energy savings. "
+            "Useful for comparing system cost-efficiency over time."
+        )
+
+        with gr.Row():
+            with gr.Column():
+                gr.Markdown("## Inputs")
+
+                inputs_nb = [
+                    gr.Number(**params, interactive=True)
+                    for params in _inputs_fields.values()
+                ]
+
+                reset_bt = gr.Button("Reset", variant="secondary")
+
+            with gr.Column():
+                gr.Markdown("## Results")
+
+                self.payback_lb = gr.Label(label="Payback Period (years)")
+
+                self.calc_payback = gr.Button("Calculate", variant="primary")
+
+        self._faq()
+        reset_bt.click(
+            fn=lambda: [gr.update(value=x["value"]) for x in _inputs_fields.values()],
+            outputs=inputs_nb,
+        )
+        self.calc_payback.click(
+            fn=self._calculate_payback,
+            inputs=inputs_nb,
+            outputs=[self.payback_lb],
+        )
+
+    def _calculate_payback(self, cost, output, rate):
+        annual_savings = output * rate
+        if annual_savings <= 0:
+            return "Error: Savings must be positive."
+        payback = cost / annual_savings
+        return f"{payback:.1f}"
+
+    def _faq(self):
+        gr.Markdown("## FAQ")
+
+        with gr.Accordion("1. Initial System Cost", open=False):
+            gr.Markdown(
+                "The total upfront investment including panels, inverters, mounting, and installation fees.\n\n"
+                "**Example**: A 5 kW system might cost around $10,000.\n\n"
+                "**Tip**: Get multiple quotes and include all soft costs (permits, labor)."
+            )
+        with gr.Accordion("2. Annual Energy Output (kWh)", open=False):
+            gr.Markdown(
+                "The estimated electricity your system will generate per year.\n\n"
+                "**Example**: 5,000 kWh/year for a typical residential PV system.\n\n"
+                "**Tip**: Use your Energy Yield tab or utility bills."
+            )
+        with gr.Accordion("3. Electricity Rate (per kWh)", open=False):
+            gr.Markdown(
+                "Your current cost of grid electricity.\n\n"
+                "**Example**: $0.20/kWh if your bill is $200 for 1,000 kWh.\n\n"
+                "**Tip**: Check recent utility bills; rates can vary seasonally."
+            )
+        with gr.Accordion("4. How is Payback Period (years) Calculated?", open=False):
+            gr.Markdown(
+                "**Formula**:"
+                "$$\\text{Payback Period} = \\frac{\\text{Initial Cost}}{\\text{Annual Savings}}$$\n\n"
+                "It shows how many years until your investment is recovered."
+            )
+
+
 class SolarSystemSizing:
     def __init__(self, parent):
         self.parent = parent
@@ -382,199 +575,6 @@ class EnergyYield:
             )
 
 
-class ROI:
-    def __init__(self, parent):
-        self.parent = parent
-
-        _inputs_fields = {
-            "system_cost": {
-                "label": "Initial System Cost",
-                "value": 10_000,
-                "precision": 2,
-            },
-            "annual_output": {
-                "label": "Annual Energy Output (kWh)",
-                "value": 5_000,
-                "precision": 0,
-            },
-            "electricity_rate": {
-                "label": "Electricity Rate (per kWh)",
-                "value": 0.20,
-                "precision": 3,
-            },
-            "system_lifetime": {
-                "label": "System Lifetime (years)",
-                "value": 25,
-                "precision": 0,
-            },
-        }
-
-        gr.Markdown(
-            "Estimate financial return based on installation cost, energy savings, incentives, and system lifespan. "
-            "Helps assess long-term economic benefits of your solar investment."
-        )
-
-        with gr.Row():
-            with gr.Column():
-                gr.Markdown("## Inputs")
-
-                inputs_nb = [
-                    gr.Number(**params, interactive=True)
-                    for params in _inputs_fields.values()
-                ]
-
-                reset_bt = gr.Button("Reset", variant="secondary")
-
-            with gr.Column():
-                gr.Markdown("## Results")
-
-                self.roi_lb = gr.Label(label="ROI (%)")
-
-                self.calc_roi = gr.Button("Calculate", variant="primary")
-
-        self._faq()
-        reset_bt.click(
-            fn=lambda: [gr.update(value=x["value"]) for x in _inputs_fields.values()],
-            outputs=inputs_nb,
-        )
-        self.calc_roi.click(
-            fn=self._calculate_roi,
-            inputs=inputs_nb,
-            outputs=[self.roi_lb],
-        )
-
-    def _calculate_roi(self, cost, output, rate, lifetime):
-        # net savings = total revenue - cost
-        total_savings = output * rate * lifetime
-        roi = (total_savings - cost) / cost * 100
-        return f"{roi:.1f}"
-
-    def _faq(self):
-        gr.Markdown("## FAQ")
-        with gr.Accordion("1. Initial System Cost", open=False):
-            gr.Markdown(
-                "The total upfront investment including panels, inverters, mounting, and installation fees.\n\n"
-                "**Example**: A 5 kW system might cost around $10,000.\n\n"
-                "**Tip**: Get multiple quotes and include all soft costs (permits, labor)."
-            )
-        with gr.Accordion("2. Annual Energy Output (kWh)", open=False):
-            gr.Markdown(
-                "The estimated electricity your system will generate per year.\n\n"
-                "**Example**: 5,000 kWh/year for a typical residential PV system.\n\n"
-                "**Tip**: Use your Energy Yield tab or utility bills."
-            )
-        with gr.Accordion("3. Electricity Rate (per kWh)", open=False):
-            gr.Markdown(
-                "Your current cost of grid electricity.\n\n"
-                "**Example**: $0.20/kWh if your bill is $200 for 1,000 kWh.\n\n"
-                "**Tip**: Check recent utility bills; rates can vary seasonally."
-            )
-        with gr.Accordion("4. System Lifetime (years)", open=False):
-            gr.Markdown(
-                "The expected operational lifespan of your PV system.\n\n"
-                "**Typical Range**: 20-30 years.\n\n"
-                "**Tip**: Manufacturer warranty often indicates reliable lifetime."
-            )
-        with gr.Accordion("5. How is ROI (%) Calculated?", open=False):
-            gr.Markdown(
-                "**Formula**:"
-                "$$ROI = \\frac{(\\text{Annual Output} \\times \\text{Rate} \\times \\text{Lifetime}) - \\text{Initial Cost}}{\\text{Initial Cost}} \\times 100$$\n\n"
-                "It measures the percentage return on your investment over the system life."
-            )
-
-
-class Payback:
-    def __init__(self, parent):
-        self.parent = parent
-
-        _inputs_fields = {
-            "system_cost": {
-                "label": "Initial System Cost",
-                "value": 10_000,
-                "precision": 2,
-            },
-            "annual_output": {
-                "label": "Annual Energy Output (kWh)",
-                "value": 5_000,
-                "precision": 0,
-            },
-            "electricity_rate": {
-                "label": "Electricity Rate (per kWh)",
-                "value": 0.20,
-                "precision": 3,
-            },
-        }
-
-        gr.Markdown(
-            "Calculate the number of years required to recover the initial investment from energy savings. "
-            "Useful for comparing system cost-efficiency over time."
-        )
-
-        with gr.Row():
-            with gr.Column():
-                gr.Markdown("## Inputs")
-
-                inputs_nb = [
-                    gr.Number(**params, interactive=True)
-                    for params in _inputs_fields.values()
-                ]
-
-                reset_bt = gr.Button("Reset", variant="secondary")
-
-            with gr.Column():
-                gr.Markdown("## Results")
-
-                self.payback_lb = gr.Label(label="Payback Period (years)")
-
-                self.calc_payback = gr.Button("Calculate", variant="primary")
-
-        self._faq()
-        reset_bt.click(
-            fn=lambda: [gr.update(value=x["value"]) for x in _inputs_fields.values()],
-            outputs=inputs_nb,
-        )
-        self.calc_payback.click(
-            fn=self._calculate_payback,
-            inputs=inputs_nb,
-            outputs=[self.payback_lb],
-        )
-
-    def _calculate_payback(self, cost, output, rate):
-        annual_savings = output * rate
-        if annual_savings <= 0:
-            return "Error: Savings must be positive."
-        payback = cost / annual_savings
-        return f"{payback:.1f}"
-
-    def _faq(self):
-        gr.Markdown("## FAQ")
-
-        with gr.Accordion("1. Initial System Cost", open=False):
-            gr.Markdown(
-                "The total upfront investment including panels, inverters, mounting, and installation fees.\n\n"
-                "**Example**: A 5 kW system might cost around $10,000.\n\n"
-                "**Tip**: Get multiple quotes and include all soft costs (permits, labor)."
-            )
-        with gr.Accordion("2. Annual Energy Output (kWh)", open=False):
-            gr.Markdown(
-                "The estimated electricity your system will generate per year.\n\n"
-                "**Example**: 5,000 kWh/year for a typical residential PV system.\n\n"
-                "**Tip**: Use your Energy Yield tab or utility bills."
-            )
-        with gr.Accordion("3. Electricity Rate (per kWh)", open=False):
-            gr.Markdown(
-                "Your current cost of grid electricity.\n\n"
-                "**Example**: $0.20/kWh if your bill is $200 for 1,000 kWh.\n\n"
-                "**Tip**: Check recent utility bills; rates can vary seasonally."
-            )
-        with gr.Accordion("4. How is Payback Period (years) Calculated?", open=False):
-            gr.Markdown(
-                "**Formula**:"
-                "$$\\text{Payback Period} = \\frac{\\text{Initial Cost}}{\\text{Annual Savings}}$$\n\n"
-                "It shows how many years until your investment is recovered."
-            )
-
-
 class EnvironmentalImpact:
     def __init__(self, parent):
         self.parent = parent
@@ -714,17 +714,17 @@ class EstimateTab:
         self.parent = parent
 
     def __call__(self):
-        with gr.Tab("Solar System Sizing"):
-            SolarSystemSizing(self.parent)
-
-        with gr.Tab("Energy Yield"):
-            EnergyYield(self.parent)
-
         with gr.Tab("ROI"):
             ROI(self.parent)
 
         with gr.Tab("Payback"):
             Payback(self.parent)
+
+        with gr.Tab("Solar System Sizing"):
+            SolarSystemSizing(self.parent)
+
+        with gr.Tab("Energy Yield"):
+            EnergyYield(self.parent)
 
         with gr.Tab("Environmental Impact"):
             EnvironmentalImpact(self.parent)
