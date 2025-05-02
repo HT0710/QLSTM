@@ -56,7 +56,7 @@ class HistoryTab:
         return self._show_data(self.current["processed"])
 
     def _select_vis(self, df, mode):
-        plot = y_axis = None
+        plot = y_axis = gr.update(visible=False)
 
         if mode == "On":
             y_axis = gr.update(
@@ -67,20 +67,16 @@ class HistoryTab:
 
             plot = self._vis_plot(df, mode, y_axis["value"])
 
-        else:
-            y_axis = gr.update(visible=False)
-
         return (
             gr.update(visible=mode == "Off"),
-            gr.update(visible=mode == "On"),
             plot,
             y_axis,
             gr.update(scale=1 if mode == "On" else 2),
         )
 
     def _vis_plot(self, df, mode, y):
-        if not (mode == "On" or y):
-            return None
+        if mode == "Off":
+            return gr.update(visible=False)
 
         df["datetime"] = pd.to_datetime(df["datetime"])
 
@@ -90,10 +86,11 @@ class HistoryTab:
             y=y,
             x_title=f"Time ({self.current['group']})",
             y_title="Energy (kWh)",
+            visible=True,
         )
 
     def _update(self):
-        df = pd.read_csv("app/history.csv")
+        df = pd.read_csv("app/history_x.csv")
         df["datetime"] = pd.to_datetime(df["datetime"])
         df = df.set_index("datetime")
 
@@ -170,13 +167,12 @@ class HistoryTab:
             interactive=False,
         )
 
-        with gr.Row(visible=False) as vis:
-            plot = gr.LinePlot(show_label=False)
+        plot = gr.LinePlot(show_label=False, interactive=False, visible=False)
 
         vis_radio.select(
             self._select_vis,
             [df, vis_radio],
-            [df, vis, plot, features_dd, group_dd],
+            [df, plot, features_dd, group_dd],
             scroll_to_output=True,
         )
 
@@ -200,7 +196,7 @@ class HistoryTab:
                     scroll_to_output=True,
                 )
 
-        group_dd.select(self._select_group, group_dd, df, scroll_to_output=True)
+        group_dd.select(self._select_group, group_dd, df)
 
         self.parent.select(
             self._update,
