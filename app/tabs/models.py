@@ -18,8 +18,7 @@ from qlstm.modules.utils import yaml_handler
 class ModelsTab:
     def __init__(self, parent):
         self.parent = parent
-        self.root = Path("./qlstm")
-        self.data_path = self.root / "data"
+        self.data_path = Path("./qlstm/data")
         self.datasets = sorted([i.name for i in self.data_path.glob("*.csv")])
         self.models = MODELS
         self.current = {}

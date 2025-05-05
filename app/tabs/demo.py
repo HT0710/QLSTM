@@ -25,9 +25,8 @@ from qlstm.modules.model import LitModel
 class DemoTab:
     def __init__(self, parent):
         self.parent = parent
-        self.root = Path("./qlstm")
-        self.data_path = self.root / "data"
-        self.dataset = sorted([i.name for i in self.data_path.glob("*.csv")])
+        self.data_path = Path("./qlstm/data")
+        self.datasets = sorted([i.name for i in self.data_path.glob("*.csv")])
         self.models = MODELS
         self.current = {
             "data": None,
@@ -235,7 +234,7 @@ class DemoTab:
                         interactive=True,
                     )
                     data_dropdown = gr.Dropdown(
-                        choices=self.dataset, label="Dataset", interactive=True
+                        choices=self.datasets, label="Dataset", interactive=True
                     )
 
             with gr.Column():
