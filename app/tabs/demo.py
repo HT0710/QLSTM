@@ -8,7 +8,6 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import rootutils
-import seaborn as sns
 import torch
 from matplotlib import pyplot as plt
 from torchmetrics.functional import mean_absolute_error, mean_squared_error, r2_score
@@ -125,14 +124,12 @@ class DemoTab:
     def _predict(self):
         plt.close()
 
-        fig, ax = plt.subplots(figsize=(16, 5), dpi=200)
-
         subset = self.current["data"][
             self.current["from"] : self.current["to"]
         ].reset_index()
 
         if subset.empty:
-            return fig
+            return None
 
         outs = []
         labels = []
@@ -187,41 +184,59 @@ class DemoTab:
             np.array, [times, outs_tilda, labels_tilda]
         )
 
-        for k, v in [("Actual", labels_tilda), ("Predicted", outs_tilda)]:
-            sns.lineplot(x=times, y=v.ravel(), ax=ax, label=k)
+        actual = pd.DataFrame(
+            {
+                "Time": times,
+                "Value": labels_tilda.ravel(),
+                "Label": "Actual",
+            }
+        )
+        predicted = pd.DataFrame(
+            {
+                "Time": times,
+                "Value": outs_tilda.ravel(),
+                "Label": "Forecasted",
+            }
+        )
 
-        fig.subplots_adjust(left=0.1, right=0.95, top=0.85, bottom=0.15)
+        data = pd.concat([actual, predicted], ignore_index=True)
 
-        ax.set_title("PV Power Output", fontsize=16, fontweight="bold", pad=14)
-        ax.set_xlabel("Time", fontsize=14, fontweight="bold", labelpad=14)
-        ax.set_ylabel("Power (kW)", fontsize=14, fontweight="bold", labelpad=14)
-
-        return fig
+        return (
+            gr.update(
+                value=data,
+                x="Time",
+                y="Value",
+                x_title="Time",
+                y_title="Energy (kWh)",
+                color="Label",
+            ),
+            *[i for i in self.current["metrics"].values()],
+        )
 
     def _update_time(self, y, m, d, indicator):
         date = self._select_time(y, m, d, indicator)
-        plot = self._predict()
+        plot, r2_lb, mae_lb, rmse_lb = self._predict()
 
-        return plot, date
+        return plot, r2_lb, mae_lb, rmse_lb, date
 
     def _update_data(self, data_name):
         fyear, tyear = self._select_data(data_name)
-        plot = self._predict()
+        plot, r2_lb, mae_lb, rmse_lb = self._predict()
 
-        return plot, fyear, tyear
+        return plot, r2_lb, mae_lb, rmse_lb, fyear, tyear
 
     def _update_model(self, model_name):
         self._select_model(model_name)
-        plot = self._predict()
+        plot, r2_lb, mae_lb, rmse_lb = self._predict()
 
-        return plot
+        return plot, r2_lb, mae_lb, rmse_lb
 
     def _init(self, data_name, model_name):
         fyear, tyear = self._select_data(data_name)
         self._select_model(model_name)
-        plot = self._predict()
+        plot, r2_lb, mae_lb, rmse_lb = self._predict()
 
-        return plot, fyear, tyear
+        return plot, r2_lb, mae_lb, rmse_lb, fyear, tyear
 
     def __call__(self):
         with gr.Row():
@@ -275,18 +290,11 @@ class DemoTab:
             mae_lb = gr.Label(label="MAE")
             rmse_lb = gr.Label(label="RMSE")
 
-        plot = gr.Plot(show_label=False)
+        plot = gr.LinePlot(show_label=False)
 
         self._faq()
 
         ### EVENTS ###
-
-        plot.change(
-            lambda: [i for i in self.current["metrics"].values()],
-            None,
-            [r2_lb, mae_lb, rmse_lb],
-        )
-
         for key, values in {
             "from": [fyear, fmonth, fday],
             "to": [tyear, tmonth, tday],
@@ -295,12 +303,20 @@ class DemoTab:
                 block.select(
                     partial(self._update_time, indicator=key),
                     values,
-                    [plot, values[-1]],
+                    [plot, r2_lb, mae_lb, rmse_lb, values[-1]],
                 )
 
-        data_dropdown.select(self._update_data, data_dropdown, [plot, fyear, tyear])
-        model_dropdown.select(self._update_model, model_dropdown, plot)
+        data_dropdown.select(
+            self._update_data,
+            data_dropdown,
+            [plot, r2_lb, mae_lb, rmse_lb, fyear, tyear],
+        )
+        model_dropdown.select(
+            self._update_model, model_dropdown, [plot, r2_lb, mae_lb, rmse_lb]
+        )
 
         self.parent.select(
-            self._init, [data_dropdown, model_dropdown], [plot, fyear, tyear]
+            self._init,
+            [data_dropdown, model_dropdown],
+            [plot, r2_lb, mae_lb, rmse_lb, fyear, tyear],
         )
