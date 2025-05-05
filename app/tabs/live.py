@@ -159,7 +159,7 @@ class LiveTab:
             data.prepare_data()
             data.setup("predict")
 
-            l_path = "qlstm/data/trainable/Albany_WA.l.csv"
+            l_path = "qlstm/data/processed/Albany_WA.l.csv"
 
             if not os.path.exists(l_path):
                 df = data.dataframe.copy()

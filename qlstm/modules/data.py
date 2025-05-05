@@ -1,13 +1,14 @@
-from pathlib import Path
-from collections import defaultdict
 import re
+from collections import defaultdict
+from pathlib import Path
 from typing import Callable, List, Optional, Sequence
-from numpy.lib.stride_tricks import sliding_window_view
+
 import numpy as np
-from omegaconf import ListConfig
 import pandas as pd
 import torch
 from lightning.pytorch import LightningDataModule
+from numpy.lib.stride_tricks import sliding_window_view
+from omegaconf import ListConfig
 from rich import print
 from rich.table import Table
 from sklearn.preprocessing import StandardScaler
@@ -396,7 +397,7 @@ class CDM_Hour(CustomDataModule):
         if len(path.suffixes) > 1 and path.suffixes[-2] == ".h":
             return path
 
-        save_folder = path.parent / "trainable"
+        save_folder = path.parent / "processed"
         save_folder.mkdir(parents=True, exist_ok=True)
 
         return save_folder / f"{path.stem}.h{path.suffix}"
@@ -459,7 +460,7 @@ class CDM_Day(CustomDataModule):
         if len(path.suffixes) > 1 and path.suffixes[-2] == ".d":
             return path
 
-        save_folder = path.parent / "trainable"
+        save_folder = path.parent / "processed"
         save_folder.mkdir(parents=True, exist_ok=True)
 
         return save_folder / f"{path.stem}.d{path.suffix}"
@@ -523,17 +524,7 @@ class CDM_Month(CustomDataModule):
         if len(path.suffixes) > 1 and path.suffixes[-2] == ".m":
             return path
 
-        save_folder = path.parent / "trainable"
-        save_folder.mkdir(parents=True, exist_ok=True)
-
-        return save_folder / f"{path.stem}.m{path.suffix}"
-
-    @staticmethod
-    def _check_data(path: Path) -> Path:
-        if len(path.suffixes) > 1 and path.suffixes[-2] == ".x":
-            return path
-
-        save_folder = path.parent / "trainable"
+        save_folder = path.parent / "processed"
         save_folder.mkdir(parents=True, exist_ok=True)
 
         return save_folder / f"{path.stem}.m{path.suffix}"
