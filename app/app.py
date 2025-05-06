@@ -1,3 +1,5 @@
+import argparse
+
 import gradio as gr
 from rich import traceback
 
@@ -13,7 +15,7 @@ from tabs.models import ModelsTab
 from tabs.system import SystemTab
 
 
-def main():
+def main(args):
     css = """
         h1 {
             text-align: center;
@@ -59,8 +61,17 @@ def main():
             with gr.Tab(label="System") as system_tab:
                 SystemTab(system_tab)()
 
-    app.launch()
+    app.launch(share=args.share)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="PV Power Forecasting App")
+    parser.add_argument(
+        "--share",
+        "-s",
+        action="store_true",
+        help="Launch Gradio app with public share link",
+    )
+    args = parser.parse_args()
+
+    main(args)
