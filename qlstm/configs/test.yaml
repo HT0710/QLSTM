@@ -1,9 +1,0 @@
-# Configuration for test.py
-
-
-# Config data
-data_path: qlstm/data/place_1_new.xlsx
-time_steps: 12
-
-# Model checkpoint
-checkpoint: lightning_logs/version_1/checkpoints/last.ckpt
