@@ -1,7 +1,7 @@
 from calendar import monthrange
+from datetime import datetime
 from functools import partial
 from pathlib import Path
-from datetime import datetime
 
 import gradio as gr
 import matplotlib.pyplot as plt
@@ -20,6 +20,7 @@ class DatasetsTab:
             "data": None,
             "processed": None,
             "group": "None",
+            "method": "Sum",
             "from": None,
             "to": None,
         }
@@ -33,7 +34,9 @@ class DatasetsTab:
 
     def _show_data(self, df):
         if self.current["group"] != "None":
-            df = df.resample(self.current["group"]).mean()
+            df = df.resample(self.current["group"])
+
+            df = df.sum() if self.current["method"] == "Sum" else df.mean()
 
             match self.current["group"]:
                 case "D" | "W":
@@ -119,6 +122,11 @@ class DatasetsTab:
 
         return self._show_data(self.current["processed"])
 
+    def _select_method(self, method):
+        self.current["method"] = method
+
+        return self._show_data(self.current["processed"])
+
     def _select_time(self, y, m, d, indicator):
         _, new_num_days = monthrange(y, m)
         d = min(d, new_num_days)
@@ -188,38 +196,37 @@ class DatasetsTab:
         return self._show_data(self.current["processed"])
 
     def _select_vis(self, df, mode):
-        plot = y_axis = None
+        plot = y_axis = gr.update(visible=False)
 
         if mode == "On":
             y_axis = gr.update(
                 choices=[c for c in df.columns if c != "datetime"],
-                value=[df.columns[-1]],
+                value=df.columns[-1],
+                visible=True,
             )
 
             plot = self._vis_plot(df, mode, y_axis["value"])
 
         return (
             gr.update(visible=mode == "Off"),
-            gr.update(visible=mode == "On"),
             plot,
             y_axis,
         )
 
     def _vis_plot(self, df, mode, y):
-        if not (mode == "On" or y):
-            return None
+        if mode == "Off":
+            return gr.update(visible=False)
 
-        fig, ax = plt.subplots(figsize=(10, 6), dpi=200)
+        df["datetime"] = pd.to_datetime(df["datetime"])
 
-        for feature in y:
-            sns.lineplot(x=pd.to_datetime(df["datetime"]), y=df[feature], ax=ax)
-
-        fig.subplots_adjust(top=0.95, bottom=0.15)
-
-        ax.set_xlabel("Time", fontsize=14, fontweight="bold", labelpad=14)
-        ax.set_ylabel("Values", fontsize=14, fontweight="bold", labelpad=14)
-
-        return fig
+        return gr.LinePlot(
+            df,
+            x="datetime",
+            y=y,
+            x_title=f"Time ({self.current['group']})",
+            y_title="Energy (kWh)",
+            visible=True,
+        )
 
     def _summary(self, df: pd.DataFrame) -> pd.DataFrame:
         summary = df.describe().T.round(2).reset_index()
@@ -373,9 +380,15 @@ class DatasetsTab:
                                 label="Visualize Mode",
                                 interactive=True,
                             )
-                            group_dropdown = gr.Dropdown(
+                            features_dd = gr.Dropdown(
+                                label="Features",
+                                interactive=True,
+                                visible=False,
+                                min_width=60,
+                            )
+                            group_dd = gr.Dropdown(
                                 [
-                                    ("None", "None"),
+                                    ("Hour", "None"),
                                     ("Day", "D"),
                                     ("Week", "W"),
                                     ("Month", "ME"),
@@ -383,7 +396,13 @@ class DatasetsTab:
                                 ],
                                 label="Group by",
                                 interactive=True,
-                                scale=2,
+                                min_width=60,
+                            )
+                            method_dd = gr.Dropdown(
+                                ["Sum", "Mean"],
+                                label="Method",
+                                interactive=True,
+                                min_width=60,
                             )
 
                     with gr.Column(scale=1, min_width=0):
@@ -419,31 +438,36 @@ class DatasetsTab:
                     interactive=False,
                 )
 
-                with gr.Row(visible=False) as vis:
-                    with gr.Column(scale=1, min_width=0):
-                        gr.Markdown("### Configuration")
-                        features_dropdown = gr.Dropdown(
-                            label="Features", multiselect=True, interactive=True
-                        )
+                vis_plot = gr.LinePlot(
+                    show_label=False, interactive=False, visible=False
+                )
 
-                    with gr.Column(scale=4):
-                        vis_plot = gr.Plot(show_label=False)
+                ### EVENTS ###
 
+                # Change group and method
+                group_dd.select(self._select_group, group_dd, rev_df)
+                method_dd.select(self._select_method, method_dd, rev_df)
+
+                # Change ma and fmh
+                ma_slider.release(self._moving_average, ma_slider, rev_df)
+                fmh_radio.select(self._fill_missing_hours, fmh_radio, rev_df)
+
+                # Select vis
                 vis_radio.select(
                     self._select_vis,
                     [rev_df, vis_radio],
-                    [rev_df, vis, vis_plot, features_dropdown],
-                    scroll_to_output=True,
+                    [rev_df, vis_plot, features_dd],
                 )
 
+                # Change plot on change df
                 gr.on(
-                    triggers=[features_dropdown.select, rev_df.change],
+                    triggers=[features_dd.select, rev_df.change],
                     fn=self._vis_plot,
-                    inputs=[rev_df, vis_radio, features_dropdown],
+                    inputs=[rev_df, vis_radio, features_dd],
                     outputs=vis_plot,
-                    scroll_to_output=True,
                 )
 
+                # Change time
                 for key, values in {
                     "from": [fyear, fmonth, fday],
                     "to": [tyear, tmonth, tday],
@@ -453,25 +477,17 @@ class DatasetsTab:
                             fn=partial(self._select_time, indicator=key),
                             inputs=values,
                             outputs=[values[-1], rev_df],
-                            scroll_to_output=True,
                         )
 
-                group_dropdown.select(
-                    self._select_group, group_dropdown, rev_df, scroll_to_output=True
-                )
+                # Back to "Review" tab
                 gr.on(
                     [ma_slider.release, fmh_radio.select, data_dropdown.select],
                     fn=lambda: gr.update(selected=0),
                     inputs=None,
                     outputs=tabs,
-                    scroll_to_output=True,
                 )
-                ma_slider.release(
-                    self._moving_average, ma_slider, rev_df, scroll_to_output=True
-                )
-                fmh_radio.select(
-                    self._fill_missing_hours, fmh_radio, rev_df, scroll_to_output=True
-                )
+
+                # Change data
                 gr.on(
                     [data_dropdown.select, self.parent.select],
                     fn=self._select_data,
@@ -544,7 +560,6 @@ class DatasetsTab:
                     fn=self._corr_pairwise,
                     inputs=[x_dropdown, y_dropdown],
                     outputs=pairwise_plot,
-                    scroll_to_output=True,
                 )
 
                 corr_df.change(self._corr_heatmap, corr_df, heatmap_plot)
