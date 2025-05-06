@@ -18,7 +18,7 @@ traceback.install()
 
 from models.cQLSTM import cQLSTM
 from modules.callback import custom_callbacks
-from modules.data import CDM2
+from modules.data import CustomDataModule
 from modules.model import LitModel
 from modules.scheduler import scheduler_with_warmup
 
@@ -36,13 +36,14 @@ def main(cfg: DictConfig) -> None:
         seed_everything(seed=cfg["set_seed"], workers=True)
 
     # Define dataset
-    dataset = CDM2(**cfg["data"])
+    dataset = CustomDataModule(**cfg["data"])
 
     # Define model
     model = cQLSTM(
-        input_size=10,
+        input_size=9,
         hidden_size=128,
-        n_qubits=2,
+        decay_rate=0.1,
+        n_qubits=4,
     )
 
     # Setup loss
@@ -99,7 +100,7 @@ def main(cfg: DictConfig) -> None:
     trainer.fit(lit_model, dataset)
 
     # Testing
-    # trainer.test(lit_model, dataset, "best")
+    # trainer.validate(lit_model, dataset)
 
 
 if __name__ == "__main__":
