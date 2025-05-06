@@ -13,13 +13,16 @@ class HistoryTab:
             "data": None,
             "processed": None,
             "group": "None",
+            "method": "Sum",
             "from": None,
             "to": None,
         }
 
     def _show_data(self, df):
         if self.current["group"] != "None":
-            df = df.resample(self.current["group"]).mean()
+            df = df.resample(self.current["group"])
+
+            df = df.sum() if self.current["method"] == "Sum" else df.mean()
 
             match self.current["group"]:
                 case "D" | "W":
@@ -55,6 +58,11 @@ class HistoryTab:
 
         return self._show_data(self.current["processed"])
 
+    def _select_method(self, method):
+        self.current["method"] = method
+
+        return self._show_data(self.current["processed"])
+
     def _select_vis(self, df, mode):
         plot = y_axis = gr.update(visible=False)
 
@@ -71,7 +79,6 @@ class HistoryTab:
             gr.update(visible=mode == "Off"),
             plot,
             y_axis,
-            gr.update(scale=1 if mode == "On" else 2),
         )
 
     def _vis_plot(self, df, mode, y):
@@ -131,7 +138,10 @@ class HistoryTab:
                         interactive=True,
                     )
                     features_dd = gr.Dropdown(
-                        label="Features", interactive=True, visible=False
+                        label="Features",
+                        interactive=True,
+                        visible=False,
+                        min_width=60,
                     )
                     group_dd = gr.Dropdown(
                         [
@@ -143,7 +153,13 @@ class HistoryTab:
                         ],
                         label="Group by",
                         interactive=True,
-                        scale=2,
+                        min_width=60,
+                    )
+                    method_dd = gr.Dropdown(
+                        ["Sum", "Mean"],
+                        label="Method",
+                        interactive=True,
+                        min_width=60,
                     )
 
             with gr.Column(scale=1, min_width=0):
@@ -169,21 +185,28 @@ class HistoryTab:
 
         plot = gr.LinePlot(show_label=False, interactive=False, visible=False)
 
+        ### EVENTS ###
+
+        # Change group and method
+        group_dd.select(self._select_group, group_dd, df)
+        method_dd.select(self._select_method, method_dd, df)
+
+        # Select vis
         vis_radio.select(
             self._select_vis,
             [df, vis_radio],
-            [df, plot, features_dd, group_dd],
-            scroll_to_output=True,
+            [df, plot, features_dd],
         )
 
+        # Change plot on change df
         gr.on(
             triggers=[features_dd.select, df.change],
             fn=self._vis_plot,
             inputs=[df, vis_radio, features_dd],
             outputs=plot,
-            scroll_to_output=True,
         )
 
+        # Change time
         for key, values in {
             "from": [fyear, fmonth, fday],
             "to": [tyear, tmonth, tday],
@@ -193,11 +216,9 @@ class HistoryTab:
                     fn=partial(self._select_time, indicator=key),
                     inputs=values,
                     outputs=[values[-1], df],
-                    scroll_to_output=True,
                 )
 
-        group_dd.select(self._select_group, group_dd, df)
-
+        # Select tab
         self.parent.select(
             self._update,
             outputs=[df, fyear, fmonth, fday, tyear, tmonth, tday],
