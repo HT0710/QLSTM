@@ -29,12 +29,12 @@ Most of the configuration for this project can be changed in `/qlstm/configs/`:
 
 **To change training model**:
 1. Use or create new model class in `qlstm/models`
-2. Import and define your model at line 42 from `qlstm/train.py`.
+2. Import and define your model at line 42 in `qlstm/train.py`.
 3. Change model config in `qlstm/configs/train.yaml`
 
 **For datasets with difference structure**:
 1. Create a custom data module at `qlstm/modules/data.py` inherited from `CustomDataModule` class.  
-2. Import and define your custom data module at line 39 from `qlstm/train.py`.
+2. Import and define your custom data module at line 39 in `qlstm/train.py`.
 3. Change data config in `qlstm/configs/train.yaml`
 
 ## Train
@@ -49,7 +49,7 @@ python qlstm/train.py -h
 ```
 Example:
 ```bash
-py qlstm/train.py trainer.accelerator=cpu optimizer=0.001
+python qlstm/train.py trainer.accelerator=cpu optimizer=0.001
 ```
 
 ## Logging
@@ -59,6 +59,8 @@ tensorboard --logdir /home/USER/.../QLSTM/lightning_logs
 ```
 
 ## Demo App
+Built with **Gradio**.
+
 Launch local:
 ```bash
 python app/app.py
