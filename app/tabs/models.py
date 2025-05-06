@@ -1,10 +1,10 @@
-import re
 from collections import defaultdict
 from pathlib import Path
 
 import gradio as gr
 import pandas as pd
 import rootutils
+from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 rootutils.autosetup(".gitignore")
 
@@ -46,22 +46,27 @@ class ModelsTab:
                 hparams = yaml_handler(str(version_folder / "hparams.yaml"))
                 data_name = hparams["data"]["data_path"].split("/")[-1]
 
-                with open(str(version_folder / "info.txt")) as f:
-                    info = f.read()
-                    train = float(
-                        re.search(r"- Train loss:\s*([0-9.]+)", info).group(1)
-                    )
+                result = {
+                    "Model": model,
+                    "Version": version,
+                }
 
-                    test = float(re.search(r"- Val loss:\s*([0-9.]+)", info).group(1))
+                ea = EventAccumulator(str(list(version_folder.glob("events.*"))[0]))
+                ea.Reload()
 
-                datasets[data_name].append(
-                    {
-                        "Model": model,
-                        "Version": version,
-                        "Train loss": train,
-                        "Test loss": test,
-                    }
+                metrics = sorted(
+                    [
+                        str(i)
+                        for i in ea.Tags()["scalars"]
+                        if str(i).startswith(("train", "val"))
+                    ]
                 )
+
+                for metric in metrics:
+                    event = ea.Scalars(metric)[-1]
+                    result[metric] = f"{event.value:.4f}"
+
+                datasets[data_name].append(result)
 
         for data_name, items in datasets.items():
             datasets[data_name] = pd.DataFrame(items)
@@ -75,17 +80,13 @@ class ModelsTab:
         )
 
     def __call__(self):
-        with gr.Row():
-            with gr.Column(scale=1, min_width=160):
-                gr.Markdown("### Options")
-                data_radio = gr.Radio(label="Dataset", interactive=True)
-
-            with gr.Column(scale=5):
-                df = gr.Dataframe(
-                    show_fullscreen_button=True,
-                    show_search="search",
-                    interactive=False,
-                )
+        data_radio = gr.Radio(label="Dataset", interactive=True)
+        df = gr.Dataframe(
+            show_fullscreen_button=True,
+            show_search="search",
+            interactive=False,
+            max_height=600,
+        )
 
         data_radio.select(self._select_data, data_radio, df)
 
