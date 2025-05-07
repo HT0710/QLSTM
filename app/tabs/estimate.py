@@ -600,6 +600,11 @@ class EnvironmentalImpact:
                 "value": 10_000,
                 "precision": 0,
             },
+            "system_lifetime": {
+                "label": "System Lifetime (years)",
+                "value": 25,
+                "precision": 0,
+            },
         }
 
         gr.Markdown(
@@ -639,13 +644,13 @@ class EnvironmentalImpact:
             outputs=[self.co2_lb, self.epbt_lb, self.ghg_lb],
         )
 
-    def _calculate_environmental(self, output, factor, embodied, lifecycle):
+    def _calculate_environmental(self, output, factor, embodied, lifecycle, lifetime):
         # CO2 avoided
         co2_avoided = output * factor / 1000  # tons/year
         # EPBT
         epbt = embodied / output if output > 0 else 0
         # GHG intensity
-        total_prod = output * 25  # assume 25-year lifetime
+        total_prod = output * lifetime  # assume 25-year lifetime
         ghg_intensity = lifecycle * 1000 / total_prod if total_prod > 0 else 0  # g/kWh
         return (f"{co2_avoided:.2f}", f"{epbt:.2f}", f"{ghg_intensity:.1f}")
 
@@ -680,7 +685,14 @@ class EnvironmentalImpact:
                 "**Tip**: Use LCA studies or standard databases (e.g., ISO 14040)."
             )
 
-        with gr.Accordion("5. How is CO₂ Avoided (tons/year) Calculated?", open=False):
+        with gr.Accordion("5. System Lifetime (years)", open=False):
+            gr.Markdown(
+                "The expected operational lifespan of your PV system.\n\n"
+                "**Typical Range**: 20-30 years.\n\n"
+                "**Tip**: Manufacturer warranty often indicates reliable lifetime."
+            )
+
+        with gr.Accordion("6. How is CO₂ Avoided (tons/year) Calculated?", open=False):
             gr.Markdown(
                 "Annual CO₂ emissions avoided by generating solar power instead of grid electricity.\n\n"
                 "**Formula**:"
@@ -689,7 +701,7 @@ class EnvironmentalImpact:
             )
 
         with gr.Accordion(
-            "6. How is Energy Payback Time (years) Calculated?", open=False
+            "7. How is Energy Payback Time (years) Calculated?", open=False
         ):
             gr.Markdown(
                 "Time required for the system to 'pay back' its embodied energy through clean energy generation.\n\n"
@@ -699,7 +711,7 @@ class EnvironmentalImpact:
             )
 
         with gr.Accordion(
-            "7. How is GHG Intensity (g CO₂-eq/kWh) Calculated?", open=False
+            "8. How is GHG Intensity (g CO₂-eq/kWh) Calculated?", open=False
         ):
             gr.Markdown(
                 "Greenhouse gas emissions per kWh over the system's lifecycle.\n\n"
